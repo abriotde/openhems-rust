@@ -8,3 +8,6 @@ reqwest = { version = "*", features = ["blocking"] }
 json = "*"
 serde = "*"
 serde_json = "*"
+# config-manager = "*"
+# config = "0.15.11"
+yaml-rust2 = "*"

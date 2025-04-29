@@ -35,8 +35,8 @@ impl HomeAssistantAPI {
 
 		let states = self.call_api("/states", None)?;
 		let mut count = 0;
-		if let JsonValue::Array(parsedList) = json::parse(&states).unwrap() {
-			for elem in parsedList {
+		if let JsonValue::Array(parsed_list) = json::parse(&states).unwrap() {
+			for elem in parsed_list {
 				if let JsonValue::Object(entity) = elem {
 					let entity_id = entity.get("entity_id").unwrap().as_str().unwrap();
 					println!(" - {entity_id}");
@@ -96,4 +96,26 @@ impl HomeAssistantAPI {
 			}
 		}
 	}
+}
+#[cfg(test)]
+mod tests {
+    use reqwest::Error;
+
+    use super::*;
+
+    #[test]
+    fn local_test() -> Result<(), Error> {
+		let mut api = get_home_assistant_api(
+			String::from("http://192.168.1.202:8123/api"),
+			String::from("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmOTM4ZTFmY2FjNTA0MWEyYWZkYjEyOGYyYTJlNGNmYiIsImlhdCI6MTcyNjU2NTU1NiwiZXhwIjoyMDQxOTI1NTU2fQ.3DdEXGsM3cg5NgMUKj2k5FsEG07p2AkRF_Ad-CljSTQ")
+		);
+		let states = api.update_network()?;
+		assert_eq!(states, true);
+		println!("{states:?}");
+	
+		let states = api.notify("Hello world!")?;
+		assert_eq!(states, true);
+		println!("{states:?}");
+		Ok(())
+    }
 }
