@@ -36,17 +36,17 @@ pub fn to_type_str(value: &Yaml) -> String {
 		}
 	}
 }
-pub fn to_type_int(value: &Yaml) -> i64 {
+pub fn to_type_int(value: &Yaml) -> i32 {
 	match value {
 		Yaml::Real(v) => {
-			let r = v.parse::<f32>().unwrap();
-			r as i64
+			let r = v.parse::<f64>().unwrap();
+			r as i32
 		}
 		Yaml::Integer(v) => {
-			*v
+			*v as i32
 		}
 		Yaml::String(v) => {
-			v.parse::<i64>().unwrap()
+			v.parse::<i32>().unwrap()
 		}
 		Yaml::Boolean(v) => {
 			if *v {
@@ -104,6 +104,41 @@ pub fn to_type_float(value: &Yaml) -> f32 {
 		}
 		Yaml::BadValue => {
 			0.0
+		}
+	}
+}
+pub fn to_type_bool(value: &Yaml) -> bool {
+	match value {
+		Yaml::Real(_) => {
+			false
+		}
+		Yaml::Integer(_) => {
+			false
+		}
+		Yaml::String(v) => {
+			if v.to_lowercase()=="true" || v=="1" {
+				true
+			} else {
+				false
+			}
+		}
+		Yaml::Boolean(v) => {
+			*v
+		}
+		Yaml::Array(_) => {
+			false
+		}
+		Yaml::Hash(_) => {
+			false
+		}
+		Yaml::Alias(_) => {
+			false
+		}
+		Yaml::Null => {
+			false
+		}
+		Yaml::BadValue => {
+			false
 		}
 	}
 }

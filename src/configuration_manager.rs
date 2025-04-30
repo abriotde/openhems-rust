@@ -66,7 +66,7 @@ impl ConfigurationManager {
 			String::from("")
 		}
 	}
-	pub fn get_as_int(&self, key:&str) -> i64 {
+	pub fn get_as_int(&self, key:&str) -> i32 {
 		if let Some(value) = self.conf.get(key) {
 			cast_utility::to_type_int(value)
 		} else {

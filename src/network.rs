@@ -3,23 +3,26 @@ use std::fmt;
 use yaml_rust2::Yaml;
 use crate::node;
 use crate::home_assistant_api::HomeStateUpdater;
-use crate::home_assistant_api::HomeAssistantAPI;
 
 
 
 #[derive(fmt::Debug)]
-pub struct Network<Updater:HomeStateUpdater> {
+pub struct Network<'a, Updater:HomeStateUpdater> {
     network_updater: Updater,
-    nodes: Vec<Box<dyn node::Node>>,
-    filtered_nodes_cache: HashMap<String, Vec<Box<dyn node::Node>>>,
+    nodes: Vec<node::Node>,
+    filtered_nodes_cache: HashMap<String, Vec<&'a node::Node>>,
     margin_power_on: f32,
 	margin_power_on_loop_nb: u32,
 	server: u64
 }
-impl<Updater:HomeStateUpdater+fmt::Display> fmt::Display for Network<Updater> {
+impl<'a, Updater:HomeStateUpdater+fmt::Display> fmt::Display for Network<'a, Updater> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Use `self.number` to refer to each positional data point.
-        write!(f, "Network({})", self.network_updater)
+        write!(f, "Network<{}> (\n", self.network_updater)?;
+		for node in self.nodes.iter() {
+			write!(f, " - {}\n", node)?;
+		}
+		write!(f, ")")
     }
 }
 
@@ -33,11 +36,11 @@ pub fn get<Updater:HomeStateUpdater+fmt::Display>(mut network_updater:Updater, n
 		margin_power_on_loop_nb: 0,
 		server: 0
 	};
-	println!("Network({network})");
+	println!("INFO {network}");
 	network
 }
 
-impl<Updater:HomeStateUpdater> Network<Updater> {
+impl<'a, Updater:HomeStateUpdater> Network<'a, Updater> {
 	fn get_margin_power(&mut self, nodes_conf:HashMap<String, &Yaml>) {
 	}
 }

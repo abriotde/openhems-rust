@@ -7,7 +7,8 @@ use std::io::Read;
 use serde_json::json;
 use crate::{
 	cast_utility,
-	node::{self, Node, Switch}
+	node::{self, Node, NodeBase, PublicPowerGrid, Switch},
+	error::ResultOpenHems
 };
 
 pub trait HomeStateUpdater {
@@ -19,11 +20,11 @@ pub trait HomeStateUpdater {
     fn update_network(&mut self) -> Result<bool, reqwest::Error>;
     // fn switch_on(&self) -> bool;
     // fn get_feeder(&self, value:&str, expectedType:&str);
-    fn get_nodes(&mut self, node_conf:Vec<&Yaml>) -> Vec<Box<dyn Node>>;
-    // fn get_publicpowergrid(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
+    fn get_nodes(&mut self, node_conf:Vec<&Yaml>) -> Vec<Node>;
+    fn get_publicpowergrid(&self,nameid:&str, node_conf:HashMap<String, &Yaml>) -> ResultOpenHems<PublicPowerGrid>;
     // fn get_solarpanel(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
     // fn get_battery(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
-    fn get_switch(&self,nameid:&str, node_conf:HashMap<String, &Yaml>) -> Switch;
+    fn get_switch(&self,nameid:&str, node_conf:HashMap<String, &Yaml>)  -> ResultOpenHems<Switch>;
     // fn get_network(&self) -> Network;
     fn get_cycle_id(&self) -> i64 {
 		// self.network.get_cycle_id()
@@ -95,7 +96,7 @@ impl HomeAssistantAPI {
 			}
 		}
 	}
-	fn get_feeder_int(&self, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:i64) -> i64 {
+	fn get_feeder_int(&self, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:i32) -> i32 {
 		if let Some(val) = node_conf.get(key) {
 			cast_utility::to_type_int(val)
 		} else {
@@ -109,11 +110,34 @@ impl HomeAssistantAPI {
 			default_value.to_string()
 		}
 	}
+	fn get_feeder_float(&self, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:f32) -> f32 {
+		if let Some(val) = node_conf.get(key) {
+			cast_utility::to_type_float(val)
+		} else {
+			default_value
+		}
+	}
+	fn get_feeder_bool(&self, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:bool) -> bool {
+		if let Some(val) = node_conf.get(key) {
+			cast_utility::to_type_bool(val)
+		} else {
+			default_value
+		}
+	}
+	fn get_nodebase<'a>(&self,nameid:&'a str, node_conf:HashMap<String, &Yaml>) -> ResultOpenHems<NodeBase> {
+		let max_power = self.get_feeder_float(&node_conf, "max_power", 0.0);
+		let min_power = self.get_feeder_float(&node_conf, "min_power", 0.0);
+		let current_power = self.get_feeder_float(&node_conf, "current_power", 0.0);
+		let is_on = self.get_feeder_bool(&node_conf, "is_on", false);
+		let node = node::get_nodebase(nameid, max_power, min_power, current_power, is_on)?;
+		Ok(node)
+	}
 }
 
+
 impl HomeStateUpdater for HomeAssistantAPI {
-    fn get_nodes(&mut self, nodes_conf:Vec<&Yaml>) -> Vec<Box<dyn Node>> {
-		let ret = Vec::new();
+    fn get_nodes(&mut self, nodes_conf:Vec<&Yaml>) -> Vec<Node> {
+		let mut ret = Vec::new();
 		let count = 0;
 		for node_c in nodes_conf {
 			let node_conf: HashMap<String, &Yaml> = cast_utility::to_type_dict(node_c);
@@ -126,12 +150,8 @@ impl HomeStateUpdater for HomeAssistantAPI {
 					nameid = String::from("node_");
 					nameid.push_str(&count.to_string());
 				}
-				let node:Box<dyn Node>;
-				match &*classname {
-					"switch" => {
-						node = Box::new(self.get_switch(&nameid, node_conf))
-					},
-					_ => println!("Unknwon class '{classname}'")
+				if let Ok(node) = node::get_node(self, &classname, nameid, node_conf) {
+					ret.push(node);
 				}
 			}
 		}
@@ -166,11 +186,17 @@ impl HomeStateUpdater for HomeAssistantAPI {
 		)?;
 		Ok(true)
 	}
-	fn get_switch(&self,nameid:&str, node_conf:HashMap<String, &Yaml>) -> Switch {
-
+	fn get_switch<'a>(&self,nameid:&'a str, node_conf:HashMap<String, &Yaml>) -> ResultOpenHems<Switch> {
+		// println!("HA:get_switch({nameid})");
 		let priority = self.get_feeder_int(&node_conf, "priority", 50);
 		let strategy_nameid = self.get_feeder_str(&node_conf, "strategy", "default");
-		node::get_switch(nameid.to_string(), priority as u32, strategy_nameid)
+		let base = self.get_nodebase(nameid, node_conf)?;
+		let node = node::get_switch(base, priority as u32, &strategy_nameid)?;
+		Ok(node)
+	}
+	fn get_publicpowergrid<'a>(&'a self,nameid:&str, node_conf:HashMap<String, &Yaml>)  -> ResultOpenHems<PublicPowerGrid> {
+		let base = self.get_nodebase(nameid, node_conf)?;
+		node::get_publicpowergrid(base, 0)
 	}
 }
 
