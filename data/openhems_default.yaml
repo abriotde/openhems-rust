@@ -1,0 +1,132 @@
+api:
+  url: http://192.168.1.202:8123/api
+  long_lived_token: ""
+  ssl_certificate: /etc/letsencrypt/live/xxx/cert.pem
+localization:
+  latitude: 48.430883803968456
+  longitude: -2.2153649964972693
+  altitude: 100
+  timeZone: Europe/Paris
+  language: "fr"
+server:
+  htmlRoot: "/"
+  inDocker: False
+  port: 8000
+  logformat: "%(levelname)s : %(asctime)s : %(message)s" # for custom configuration see https://docs.python.org/3/library/logging.html#logrecord-attributes
+  logfile: "" # set a log file. When "", there is no logfile (only STDOUT)
+  loglevel: info # Optional, default is info, availables are debug / info / warn / error / critical / no
+  loopDelay: 30 # interval beetween 2 loop
+  network: homeassistant # Define the type of network API used to control the home energy.
+  strategies: []
+network:
+  nodes: [] # List the source of electric power / stockage
+# - class=publicpowergrid: currentPower, maxPower, minPower, powerMargin
+# - class=battery: currentPower, level (current_battery_level), maxPowerIn (max_discharge_power_watt), maxPowerOut (max_charge_power_watt), efficiencyIn (discharge_efficiency:0.95), efficiencyOut (charge_efficiency:0.95), capacity (watt), lowLevel (state_of_charge_min), highLevel (state_of_charge_max), targetLevel (state_of_charge_target)
+# - class=solarpanel: currentPower, maxPower (max_discharge_power_watt), moduleModel (CSUN_Eurasia_Energy_Systems_Industry_and_Trade_CSUN295_60M), inverterModel: (Fronius_International_GmbH__Fronius_Primo_5_0_1_208_240__240V_), tilt, azimuth, modules_per_string, strings_per_inverter
+# - class=switch: id, isOn, currentPower, maxPower
+default:
+  strategy:
+    emhass:
+      freq: 30
+      days_to_retrieve: 2
+      method_ts_round: nearest
+      delta_forecast: 1
+      weather_forecast_method: scrapper
+      set_total_pv_sell: False
+      lp_solver: default
+      lp_solver_path: empty
+      set_nocharge_from_grid: False
+      set_nodischarge_to_grid: True
+      set_battery_dynamic: False
+      battery_dynamic_max: 0.9
+      battery_dynamic_min: -0.9
+    offpeak:
+      improvedSecurity: true
+    switchoff:
+      reverse: False
+      offhours: []
+      offconditions: False
+    annealing:
+      freq: 15
+      max_iteration_number: 1000
+      initial_temp: 1000
+      cooling_factor: 0.95
+      min_temp: 0.1
+      max_no_improve: 100
+    nosell:
+      ratio: -1
+      margin: 300
+      cycleDuration: 1
+      refCoefficient: 1
+    nobuy:
+      ratio: 1
+      margin: 300
+    ratiosellbuy:
+      ratio: 0
+      margin: 200
+  node:
+    publicpowergrid:
+      currentPower: null
+      maxPower: 6000
+      minPower: null
+      marginPower: 1000
+      contract:
+        rtetempo:
+          color: null
+          nextcolor: null
+          offpeakhoursranges: ["22h - 6h"]
+          peakprice:
+            bleu: 0.1609
+            blanc: 0.1894
+            rouge: 0.7562
+          offpeakprice:
+            bleu: 0.1296
+            blanc: 0.1486
+            rouge: 0.1568
+        rteheurescreuses:
+          offpeakhoursranges: ["22h - 6h"]
+          peakprice: 0.2700
+          offpeakprice: 0.2068
+        rtetarifbleu:
+          price: 0.2516
+        generic:
+          offpeakhoursranges: []
+          defaultPrice: 0.1
+          outRangePrice: 1.0
+          sellprice: 0.0
+    solarpanel:
+      currentPower: null
+      maxPower: 500
+      moduleModel: CSUN_Eurasia_Energy_Systems_Industry_and_Trade_CSUN295_60M
+      inverterModel: Fronius_International_GmbH__Fronius_Primo_5_0_1_208_240__240V_
+      tilt: 45
+      azimuth: 180
+      modulesPerString: 1
+      stringsPerInverter: 1
+      marginPower: 300
+    battery:
+      currentPower: null
+      maxPowerIn: 2000
+      maxPowerOut: 2000
+      efficiencyIn: 0.95
+      efficiencyOut: 0.95
+      capacity: 10000
+      currentLevel: null
+      lowLevel: 0.20
+      highLevel: 0.80
+      targetLevel: 0.75
+    switch:
+      currentPower: null
+      maxPower: 2000
+      isOn: ''
+      strategy: ''
+      priority: 50
+      sensor: ''
+      target: ''
+      constraint:
+        minPower: null
+        maxPower: null
+        minDurationOn: null
+        minDurationOff: null
+        maxDurationOn: null
+        maxDurationOff: null

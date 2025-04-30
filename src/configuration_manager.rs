@@ -1,42 +1,7 @@
 use std::{collections::HashMap, fs};
 use std::error::Error;
 use yaml_rust2::{Yaml, YamlLoader};
-
-pub fn cast_str(value: &yaml_rust2::Yaml) -> String {
-	match value {
-		Yaml::Real(v) => {
-			v.to_string()
-		}
-		Yaml::Integer(v) => {
-			v.to_string()
-		}
-		Yaml::String(v) => {
-			v.to_string()
-		}
-		Yaml::Boolean(v) => {
-			if *v {
-				String::from("True")
-			} else {
-				String::from("False")
-			}
-		}
-		Yaml::Array(_) => {
-			String::from("")
-		}
-		Yaml::Hash(_) => {
-			String::from("")
-		}
-		Yaml::Alias(_) => {
-			String::from("")
-		}
-		Yaml::Null => {
-			String::from("")
-		}
-		Yaml::BadValue => {
-			String::from("")
-		}
-	}
-}
+use crate::cast_utility;
 
 pub struct ConfigurationManager {
 	conf:HashMap<String, Box<Yaml>>,
@@ -44,20 +9,26 @@ pub struct ConfigurationManager {
 	default_path:String
 }
 
-pub fn get () -> ConfigurationManager {
-	ConfigurationManager {
+pub fn get(default_path:Option<String>) -> ConfigurationManager {
+	let mut conf = ConfigurationManager {
 		conf: HashMap::new(),
 		cache: HashMap::new(),
 		default_path: String::from("")
+	};
+	if let Some(path) = default_path {
+		let _ = conf.add_yaml_config(&path, true);
+	} else {
+		let path = "./data/openhems_default.yaml";
+		let _ = conf.add_yaml_config(path, true);
 	}
+	conf
 }
 
 impl ConfigurationManager {
-
-	fn add(&mut self, key:&str, value:&Yaml) {
+	fn add(&mut self, key:&str, value:&Yaml, init:bool) {
 		if let Yaml::Hash(config) = value {
 			for (k, value) in config.into_iter() {
-				let k_str = cast_str(k);
+				let k_str = cast_utility::to_type_str(k);
 				let mut newkey:String;
 				if key!="" {
 					newkey = String::from(key);
@@ -66,22 +37,54 @@ impl ConfigurationManager {
 				} else {
 					newkey = k_str;
 				}
-				self.add(&newkey, value);
+				self.add(&newkey, value, init);
 			}
 		} else {
 			let val = Box::new(value.clone());
-			println!(" - {key}");
-			self.conf.insert(key.to_string(),val);
+			if !init && !self.conf.contains_key(key){
+				println!("ERROR : key='{key}' is not valid in configuration.");
+			} else {
+				// println!(" - {key}");
+				self.conf.insert(key.to_string(),val);
+			}
 		}
 	}
 
-	pub fn add_yaml_config(&mut self, file_path:&str) -> Result<(), Box<dyn Error>> {
+	pub fn add_yaml_config(&mut self, file_path:&str, init:bool) -> Result<(), Box<dyn Error>> {
 		self.default_path = String::from(file_path);
 		let yaml_config: String = fs::read_to_string(file_path)?;
 		// println!("Yaml configuration:{yaml_config}");
 		let docs = YamlLoader::load_from_str(&yaml_config)?;
 		let doc = &docs[0];
-		self.add("", doc);
+		self.add("", doc, init);
 		Ok(())
+	}
+	pub fn get_as_str(&self, key:&str) -> String {
+		if let Some(value) = self.conf.get(key) {
+			cast_utility::to_type_str(value)
+		} else {
+			String::from("")
+		}
+	}
+	pub fn get_as_int(&self, key:&str) -> i64 {
+		if let Some(value) = self.conf.get(key) {
+			cast_utility::to_type_int(value)
+		} else {
+			0
+		}
+	}
+	pub fn get_as_float(&self, key:&str) -> f32 {
+		if let Some(value) = self.conf.get(key) {
+			cast_utility::to_type_float(value)
+		} else {
+			0.0
+		}
+	}
+	pub fn get_as_list(&self, key:&str) -> Vec<&Yaml> {
+		if let Some(value) = self.conf.get(key) {
+			cast_utility::to_type_list(value)
+		} else {
+			Vec::new()
+		}
 	}
 }
