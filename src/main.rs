@@ -19,7 +19,7 @@ fn main() {
 	let _ = get_network(&configurator);
 }
 
-fn get_network<'a>(configurator:&'a configuration_manager::ConfigurationManager) -> ResultOpenHems<Network<'a , HomeAssistantAPI>> {
+fn get_network(configurator:&configuration_manager::ConfigurationManager) -> ResultOpenHems<Network<HomeAssistantAPI>> {
 	let network_source = configurator.get_as_str("server.network");
 	let nodes_conf = configurator.get_as_list("network.nodes");
 	if network_source=="homeassistant" {
@@ -27,7 +27,9 @@ fn get_network<'a>(configurator:&'a configuration_manager::ConfigurationManager)
 		let url = configurator.get_as_str("api.url");
 		let token = configurator.get_as_str("api.long_lived_token");
 		let network_updater = home_assistant_api::get(url, token);
-		let network = network::get(network_updater, nodes_conf);
+		let mut network = network::get(network_updater);
+		network.set_nodes(nodes_conf);
+		println!("{}", network);
 		Ok(network)
 	} else { if network_source=="fake" {
 		println!("TODO : Network: FakeNetwork");

@@ -6,9 +6,7 @@ use core::fmt;
 use std::io::Read;
 use serde_json::json;
 use crate::{
-	cast_utility,
-	node::{self, Node, NodeBase, PublicPowerGrid, Switch},
-	error::ResultOpenHems
+	cast_utility, error::ResultOpenHems, network::NodesHeap, node::{self, Node, NodeBase, PublicPowerGrid, Switch}
 };
 
 pub trait HomeStateUpdater {
@@ -20,7 +18,6 @@ pub trait HomeStateUpdater {
     fn update_network(&mut self) -> Result<bool, reqwest::Error>;
     // fn switch_on(&self) -> bool;
     // fn get_feeder(&self, value:&str, expectedType:&str);
-    fn get_nodes(&mut self, node_conf:Vec<&Yaml>) -> Vec<Node>;
     fn get_publicpowergrid(&self,nameid:&str, node_conf:HashMap<String, &Yaml>) -> ResultOpenHems<PublicPowerGrid>;
     // fn get_solarpanel(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
     // fn get_battery(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
@@ -34,7 +31,6 @@ pub trait HomeStateUpdater {
 
 #[derive(Debug)]
 pub struct HomeAssistantAPI {
-
     token: String,
     url: String,
     network: u64,
@@ -136,27 +132,6 @@ impl HomeAssistantAPI {
 
 
 impl HomeStateUpdater for HomeAssistantAPI {
-    fn get_nodes(&mut self, nodes_conf:Vec<&Yaml>) -> Vec<Node> {
-		let mut ret = Vec::new();
-		let count = 0;
-		for node_c in nodes_conf {
-			let node_conf: HashMap<String, &Yaml> = cast_utility::to_type_dict(node_c);
-			if let Some(class) = node_conf.get("class") {
-				let classname = cast_utility::to_type_str(class);
-				let mut nameid: String;
-				if let Some(id) = node_conf.get("id") {
-					nameid = cast_utility::to_type_str(id);
-				} else {
-					nameid = String::from("node_");
-					nameid.push_str(&count.to_string());
-				}
-				if let Ok(node) = node::get_node(self, &classname, nameid, node_conf) {
-					ret.push(node);
-				}
-			}
-		}
-		ret
-	}
     fn init_network(&mut self) {
 
 	}

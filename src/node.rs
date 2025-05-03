@@ -2,21 +2,14 @@ use core::fmt;
 use std::ops::Deref;
 use std::marker::Copy;
 use arrayvec::ArrayString;
+use reqwest::Version;
 use std::collections::HashMap;
 use yaml_rust2::Yaml;
 use log;
 use crate::home_assistant_api::HomeStateUpdater;
 use crate::error::{OpenHemsError, ResultOpenHems};
 
-pub trait NodeTrait {
-	fn get_type(&self) -> NodeType;
-	fn get_id(&self) -> &str;
-    fn get_min_power(&self) -> f32;
-    fn get_max_power(&self) -> f32;
-    fn get_current_power(&self) -> f32;
-    fn is_on(&self) -> bool;
-    fn is_activate(&self) -> bool;
-}
+#[derive(Copy, Clone)]
 pub enum NodeType {
     // #[lang = "NodeBase"]
 	NodeBase,
@@ -24,93 +17,63 @@ pub enum NodeType {
     Switch,
 	PublicPowerGrid,
 }
-pub union NodeUnion {
-	base:NodeBase,
-    switch:Switch,
-	powergrid:PublicPowerGrid,
-}
-
-pub struct Node {
-	tag: NodeType,
-	val: NodeUnion,
-}
-pub fn get_node<Updater:HomeStateUpdater>(updater:&mut Updater, classname:&str, nameid: String, node_conf: HashMap<String, &Yaml>) -> ResultOpenHems<Node> {
-	match &*classname.to_lowercase() {
-		"switch" => {
-			let node = updater.get_switch(&nameid, node_conf)?;
-			let wrapping_node = Node {
-				tag: NodeType::Switch,
-				val: NodeUnion{switch: node}
-			};
-			Ok(wrapping_node)
-		},
-		"publicpowergrid" => {
-			let node = updater.get_publicpowergrid(&nameid, node_conf)?;
-			let wrapping_node = Node {
-				tag: NodeType::PublicPowerGrid,
-				val: NodeUnion{powergrid: node}
-			};
-			Ok(wrapping_node)
-		},
-		_ => {
-			let message = format!("Unknwon class '{classname}'");
-			log::error!("ERROR {}",&message);
-			Err(OpenHemsError::new(message))
-		}
-	}
-}
-impl fmt::Display for Node {
+impl fmt::Display for NodeType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Use `self.number` to refer to each positional data point.
-        write!(f, "Node(, MaxPower)")
+        let s:&str;
+		match self {
+			NodeType::NodeBase => {
+				s = "NodeBase";
+			}
+			NodeType::Switch => {
+				s = "Switch";
+			}
+			NodeType::PublicPowerGrid => {
+				s = "PublicPowerGrid";
+			}
+		}
+        write!(f, "{}", s)
     }
 }
-impl fmt::Debug for Node {
+impl fmt::Debug for NodeType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Use `self.number` to refer to each positional data point.
-        write!(f, "Node(, MaxPower:)")
+        let s:&str;
+		match self {
+			NodeType::NodeBase => {
+				s = "NodeBase";
+			}
+			NodeType::Switch => {
+				s = "Switch";
+			}
+			NodeType::PublicPowerGrid => {
+				s = "PublicPowerGrid";
+			}
+		}
+        write!(f, "{}", s)
     }
 }
-impl Node {
-	fn to_type_nodebase(&self) -> Option<NodeBase> {
-		unsafe {
-			match self.tag {
-				NodeType::NodeBase => {
-					Some(self.val.base)
-				}
-				_ => {
-					None
-				}
-			}
-		}
-	}
-	fn to_type_publicpowergrid(&self) -> Option<PublicPowerGrid> {
-		unsafe {
-			match self.tag {
-				NodeType::PublicPowerGrid => {
-					Some(self.val.powergrid)
-				}
-				_ => {
-					None
-				}
-			}
-		}
-	}
-	fn to_type_switch(&self) -> Option<Switch> {
-		unsafe {
-			match self.tag {
-				NodeType::PublicPowerGrid => {
-					Some(self.val.switch)
-				}
-				_ => {
-					None
-				}
-			}
-		}
-	}
+pub trait Node {
+	fn get_type(&self) -> NodeType;
+	fn get_id(&self) -> &str;
+	fn get_min_power(&self) -> f32;
+	fn get_max_power(&self) -> f32;
+	fn get_current_power(&self) -> f32;
+	fn is_on(&self) -> bool;
+	fn is_activate(&self) -> bool;
+}
+impl fmt::Display for dyn Node {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Use `self.number` to refer to each positional data point.
+        write!(f, "{}({})", self.get_type(), self.get_id())
+    }
+}
+impl fmt::Debug for dyn Node {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Use `self.number` to refer to each positional data point.
+        write!(f, "{}({})", self.get_type(), self.get_id())
+    }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct NodeBase {
 	nameid: ArrayString<16>,
 	max_power: f32,
@@ -134,7 +97,7 @@ pub fn get_nodebase(nameid: &str, max_power: f32, min_power: f32, current_power:
 		Err(OpenHemsError::new(format!("'id' is to long (Limit is 16) for node {nameid}.")))
 	}
 }
-impl NodeTrait for NodeBase {
+impl Node for NodeBase {
     // Attributes
 	fn get_id(&self) -> &str {
 		&self.nameid
@@ -159,7 +122,7 @@ impl NodeTrait for NodeBase {
 	}
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Switch {
 	// Node
 	node: NodeBase,
@@ -187,8 +150,32 @@ impl Deref for Switch {
         &self.node
     }
 }
+impl Node for Switch {
+    // Attributes
+	fn get_id(&self) -> &str {
+		self.node.get_id()
+	}
+    fn get_min_power(&self) -> f32 {
+		self.node.get_min_power()
+	}
+    fn get_max_power(&self) -> f32 {
+		self.node.get_max_power()
+	}
+    fn get_current_power(&self) -> f32 {
+		self.node.get_current_power()
+	}
+    fn is_on(&self) -> bool {
+		self.node.is_on()
+	}
+    fn is_activate(&self) -> bool {
+		self.node.is_activate()
+	}
+	fn get_type(&self) -> NodeType {
+		NodeType::Switch
+	}
+}
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct PublicPowerGrid {
 	// Node
 	node: NodeBase,
@@ -207,4 +194,28 @@ impl Deref for PublicPowerGrid {
     fn deref(&self) -> &NodeBase {
         &self.node
     }
+}
+impl Node for PublicPowerGrid {
+    // Attributes
+	fn get_id(&self) -> &str {
+		self.node.get_id()
+	}
+    fn get_min_power(&self) -> f32 {
+		self.node.get_min_power()
+	}
+    fn get_max_power(&self) -> f32 {
+		self.node.get_max_power()
+	}
+    fn get_current_power(&self) -> f32 {
+		self.node.get_current_power()
+	}
+    fn is_on(&self) -> bool {
+		self.node.is_on()
+	}
+    fn is_activate(&self) -> bool {
+		self.node.is_activate()
+	}
+	fn get_type(&self) -> NodeType {
+		NodeType::PublicPowerGrid
+	}
 }
