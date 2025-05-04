@@ -42,9 +42,9 @@ impl ConfigurationManager {
 		} else {
 			let val = Box::new(value.clone());
 			if !init && !self.conf.contains_key(key){
-				println!("ERROR : key='{key}' is not valid in configuration.");
+				log::error!("key='{key}' is not valid in configuration.");
 			} else {
-				// println!(" - {key}");
+				//  log::debug!(" - ConfigurationManager.add({key})");
 				self.conf.insert(key.to_string(),val);
 			}
 		}
@@ -53,7 +53,7 @@ impl ConfigurationManager {
 	pub fn add_yaml_config(&mut self, file_path:&str, init:bool) -> Result<(), Box<dyn Error>> {
 		self.default_path = String::from(file_path);
 		let yaml_config: String = fs::read_to_string(file_path)?;
-		// println!("Yaml configuration:{yaml_config}");
+		log::info!("Load YAML configuration from : {file_path}");
 		let docs = YamlLoader::load_from_str(&yaml_config)?;
 		let doc = &docs[0];
 		self.add("", doc, init);
@@ -80,7 +80,7 @@ impl ConfigurationManager {
 			0.0
 		}
 	}
-	pub fn get_as_list(&self, key:&str) -> Vec<&Yaml> {
+	pub fn get_as_list<'a>(&'a self, key:&str) -> Vec<&'a Yaml> {
 		if let Some(value) = self.conf.get(key) {
 			cast_utility::to_type_list(value)
 		} else {

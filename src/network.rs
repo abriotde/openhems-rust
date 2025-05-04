@@ -1,42 +1,39 @@
-use core::net;
 use std::collections::HashMap;
-use std::fmt;
 use yaml_rust2::Yaml;
-use crate::node::{self, PublicPowerGrid};
+use crate::node;
 use crate::home_assistant_api::HomeStateUpdater;
 use crate::cast_utility;
-use crate::error::{OpenHemsError, ResultOpenHems};
 
 // Rust equivalent of Python nodes list with multi nodes types.
 #[derive(Clone)]
-pub struct NodesHeap {
-	publicpowergrid: Option<node::PublicPowerGrid>,
-	switch: Vec<node::Switch>,
+pub struct NodesHeap<'a, Updater:HomeStateUpdater+Clone> {
+	publicpowergrid: Option<node::PublicPowerGrid<'a, Updater>>,
+	switch: Vec<node::Switch<'a, Updater>>,
 	// solarpanel: Vec<node::SolarPanel>,
 	// battery: Vec<node::Battery>,
 }
-struct NodesHeapIterator<'a> {
+struct NodesHeapIterator<'a, Updater:HomeStateUpdater+Clone> {
 	nodetype: node::NodeType,
 	index:usize,
 	filter: &'a str,
-	heap: &'a NodesHeap
+	heap: &'a NodesHeap<'a, Updater>
 }
-impl<'a> fmt::Debug for NodesHeap {
+/* impl<'a, Updater:HomeStateUpdater+Clone> fmt::Debug for NodesHeap<'a, Updater> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		for node in self.get_all("all") {
-			write!(f, ", {}", node);
+			let _ = write!(f, ", {}", node);
 		}
 		Ok(())
     }
-}
-impl<'a> Iterator for NodesHeapIterator<'a> {
+} */
+impl<'a, Updater:HomeStateUpdater+Clone> Iterator for NodesHeapIterator<'a, Updater> {
     // We can refer to this type using Self::Item
-    type Item = Box<dyn node::Node>;
+    type Item = Box<&'a dyn node::Node>;
 
     fn next(&mut self) -> Option<Self::Item> {
 		match self.nodetype {
 			node::NodeType::PublicPowerGrid => {
-				if let Some(power) = self.heap.publicpowergrid {
+				if let Some(power) = self.heap.publicpowergrid.as_ref() {
 					self.index = 0;
 					self.nodetype = node::NodeType::Switch;
 					Some(Box::new(power))
@@ -49,7 +46,7 @@ impl<'a> Iterator for NodesHeapIterator<'a> {
 			node::NodeType::Switch => {
 				if self.index<self.heap.switch.len() {
 					self.index += 1;
-					Some(Box::new(self.heap.switch[self.index-1]))
+					Some(Box::new(&self.heap.switch[self.index-1]))
 				} else {
 					self.index = 0;
 					self.nodetype = node::NodeType::NodeBase;
@@ -63,8 +60,8 @@ impl<'a> Iterator for NodesHeapIterator<'a> {
     }
 }
 
-impl NodesHeap {
-	pub fn get_all<'a>(&'a self, filter:&'a str) -> NodesHeapIterator<'a> {
+impl<'a, Updater:HomeStateUpdater+Clone> NodesHeap<'a, Updater> {
+	pub fn get_all(&'a self, filter:&'a str) -> NodesHeapIterator<'a, Updater> {
 		NodesHeapIterator {
 			nodetype: node::NodeType::PublicPowerGrid,
 			index: 0,
@@ -72,26 +69,7 @@ impl NodesHeap {
 			heap: &self,
 		}
 	}
-	pub fn set_node<Updater:HomeStateUpdater>(&mut self, updater:&mut Updater, classname:&str, nameid:&str, node_conf: HashMap<String, &Yaml>) -> ResultOpenHems<()> {
-		match &*classname.to_lowercase() {
-			"switch" => {
-				let node = updater.get_switch(nameid, node_conf)?;
-				self.switch.push(node);
-				Ok(())
-			},
-			"publicpowergrid" => {
-				let node = updater.get_publicpowergrid(nameid, node_conf)?;
-				self.publicpowergrid= Some(node);
-				Ok(())
-			},
-			_ => {
-				let message = format!("Unknwon class '{classname}'");
-				log::error!("ERROR {}",&message);
-				Err(OpenHemsError::new(message))
-			}
-		}
-	}
-	pub fn set_nodes<Updater:HomeStateUpdater>(&mut self, updater:&mut Updater, nodes_conf:Vec<&Yaml>) {
+	pub fn set_nodes(&mut self, updater:&'a mut Updater, nodes_conf:Vec<&Yaml>) {
 		let count = 0;
 		for node_c in nodes_conf {
 			let node_conf: HashMap<String, &Yaml> = cast_utility::to_type_dict(node_c);
@@ -104,60 +82,83 @@ impl NodesHeap {
 					nameid = String::from("node_");
 					nameid.push_str(&count.to_string());
 				}
-				if let Err(error) = self.set_node(updater, &classname, &nameid, node_conf) {
-					log::error!("{error}");
-					// TODO : register
+				match &*classname.to_lowercase() {
+					"switch" => {
+						match updater.get_switch(nameid.as_str(), node_conf) {
+							Ok(node) => {
+								self.switch.push(node);
+							}
+							Err(err) => {
+								let message = format!("Impossible to add switch '{nameid}' due to {}.", err.message);
+								log::error!("ERROR {}",&message);
+							}
+						}
+					},
+					"publicpowergrid" => {
+						match updater.get_publicpowergrid(nameid.as_str(), node_conf) {
+							Ok(node) => {
+								self.publicpowergrid = Some(node);
+							}
+							Err(err) => {
+								let message = format!("Impossible to add PublicPowerGrid '{nameid}' due to {}.", err.message);
+								log::error!("ERROR {}",&message);
+							}
+						}
+					},
+					_ => {
+						let message = format!("Unknwon class '{classname}'");
+						log::error!("ERROR {}",&message);
+					}
 				}
 			} else {
 				log::error!("Missing classname for node.");
 			}
 		}
 	}
-	fn get_all_publicpowergrid(&self, _pattern:&str) -> & Option<node::PublicPowerGrid> {
+	fn get_all_publicpowergrid(&self, _pattern:&str) -> & Option<node::PublicPowerGrid<'a, Updater>> {
 		& self.publicpowergrid
 	}
-	fn get_all_switch(&self, _pattern:&str) -> &Vec<node::Switch> {
+	fn get_all_switch(&self, _pattern:&str) -> &Vec<node::Switch<'a, Updater>> {
 		& self.switch
 	}
 }
 
-#[derive(fmt::Debug)]
-pub struct Network<Updater:HomeStateUpdater> {
-    network_updater: Updater,
-    nodes: NodesHeap,
+#[derive(Clone)]
+pub struct Network<'a, Updater:HomeStateUpdater+Clone> {
+    pub updater: Updater,
+    nodes: NodesHeap<'a, Updater>,
     margin_power_on: f32,
 	margin_power_on_loop_nb: u32,
 	server: u64
 }
 
-impl<'a, Updater:HomeStateUpdater+fmt::Display> fmt::Display for Network<Updater> {
+/* impl<'a, Updater:HomeStateUpdater+fmt::Display+Clone> fmt::Display for Network<'a, Updater> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Use `self.number` to refer to each positional data point.
-        write!(f, "Network<{}> (\n", self.network_updater)?;
+        write!(f, "Network<{}> (\n", self.updater)?;
 		for node in self.nodes.get_all("all") {
 			write!(f, " - {}\n", node)?;
 		}
 		write!(f, ")")
     }
-}
+} */
 
-pub fn get<'a, Updater:HomeStateUpdater+fmt::Display>(network_updater:Updater) -> Network<Updater> {
-	let network = Network {
-		network_updater: network_updater,
-		nodes: NodesHeap {
-			publicpowergrid: None,
-			switch: Vec::new(),
-		},
-		margin_power_on: -1.0,
-		margin_power_on_loop_nb: 0,
-		server: 0
-	};
-	// println!("INFO {network}");
-	network
-}
-
-impl<Updater:HomeStateUpdater> Network<Updater> {
-	pub fn set_nodes(&mut self, nodes_conf:Vec<&Yaml>) {
-		self.nodes.set_nodes(&mut self.network_updater, nodes_conf);
+impl<'a, Updater> Network<'a, Updater> 
+	where Updater:HomeStateUpdater+Clone
+{
+	pub fn default() -> Network<'a, Updater> {
+		Network {
+			updater: Updater::default(),
+			nodes: NodesHeap {
+				publicpowergrid: None,
+				switch: Vec::new(),
+			},
+			margin_power_on: -1.0,
+			margin_power_on_loop_nb: 0,
+			server: 0
+		}
+	}
+	pub fn set_nodes(&'a mut self, nodes_conf:Vec<&Yaml>) {
+		self.nodes.set_nodes(&mut self.updater, nodes_conf);
 	}
 }

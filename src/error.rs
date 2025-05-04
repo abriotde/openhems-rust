@@ -3,7 +3,7 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct OpenHemsError {
-	message: String,
+	pub message: String,
 	// level: log::Level
 }
 impl fmt::Display for OpenHemsError {
