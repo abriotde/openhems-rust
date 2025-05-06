@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use yaml_rust2::Yaml;
+use std::fmt;
 use crate::node;
 use crate::home_assistant_api::HomeStateUpdater;
 use crate::cast_utility;
@@ -12,15 +13,18 @@ pub struct NodesHeap<'a, Updater:HomeStateUpdater+Clone> {
 	// solarpanel: Vec<node::SolarPanel>,
 	// battery: Vec<node::Battery>,
 }
-struct NodesHeapIterator<'a, Updater:HomeStateUpdater+Clone> {
+struct NodesHeapIterator<'b, Updater:HomeStateUpdater+Clone+'b> {
 	nodetype: node::NodeType,
 	index:usize,
-	filter: &'a str,
-	heap: &'a NodesHeap<'a, Updater>
+	filter: String,
+	heap: &'b NodesHeap<'b, Updater>
 }
-/* impl<'a, Updater:HomeStateUpdater+Clone> fmt::Debug for NodesHeap<'a, Updater> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		for node in self.get_all("all") {
+/*
+impl<'a, Updater:HomeStateUpdater+Clone> fmt::Debug for NodesHeap<'a, Updater> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+	{
+		let iter: NodesHeapIterator<'_, Updater> = self.get_all();
+		for node in iter {
 			let _ = write!(f, ", {}", node);
 		}
 		Ok(())
@@ -61,11 +65,12 @@ impl<'a, Updater:HomeStateUpdater+Clone> Iterator for NodesHeapIterator<'a, Upda
 }
 
 impl<'a, Updater:HomeStateUpdater+Clone> NodesHeap<'a, Updater> {
-	pub fn get_all(&'a self, filter:&'a str) -> NodesHeapIterator<'a, Updater> {
+	pub fn get_all<'b>(&'static self) -> NodesHeapIterator<'b, Updater>
+	{
 		NodesHeapIterator {
 			nodetype: node::NodeType::PublicPowerGrid,
 			index: 0,
-			filter: filter,
+			filter: "all".to_string(),
 			heap: &self,
 		}
 	}
@@ -131,12 +136,13 @@ pub struct Network<'a, Updater:HomeStateUpdater+Clone> {
 	margin_power_on_loop_nb: u32,
 	server: u64
 }
-
-/* impl<'a, Updater:HomeStateUpdater+fmt::Display+Clone> fmt::Display for Network<'a, Updater> {
+/*
+impl<'a, Updater:HomeStateUpdater+fmt::Display+Clone> fmt::Display for Network<'a, Updater> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Use `self.number` to refer to each positional data point.
         write!(f, "Network<{}> (\n", self.updater)?;
-		for node in self.nodes.get_all("all") {
+		let iter = self.nodes.get_all();
+		for node in  iter {
 			write!(f, " - {}\n", node)?;
 		}
 		write!(f, ")")
