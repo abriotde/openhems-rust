@@ -7,7 +7,8 @@ use std::io::Read;
 use serde_json::json;
 use crate::{
 	cast_utility, error::{OpenHemsError, ResultOpenHems}, node::{self, NodeBase, PublicPowerGrid, Switch},
-	feeder::SourceFeeder
+	feeder::SourceFeeder,
+	contract::Contract
 };
 
 pub trait HomeStateUpdater 
@@ -28,10 +29,10 @@ pub trait HomeStateUpdater
 
 	// fn switch_on(&self) -> bool;
 	// fn get_feeder(&self, value:&str, expectedType:&str);
-	fn get_publicpowergrid(&self,nameid:&str, node_conf:HashMap<String, &Yaml>) -> ResultOpenHems<PublicPowerGrid<Self>>;
+	fn get_publicpowergrid(&self,nameid:&str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<PublicPowerGrid<Self>>;
 	// fn get_solarpanel(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
 	// fn get_battery(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
-	fn get_switch(&self, nameid:&str, node_conf:HashMap<String, &Yaml>)  -> ResultOpenHems<Switch<Self>>;
+	fn get_switch(&self, nameid:&str, node_conf:&HashMap<String, &Yaml>)  -> ResultOpenHems<Switch<Self>>;
     // fn get_network(&self) -> Network;
     fn get_cycle_id(&self) -> u32;
 }
@@ -133,11 +134,11 @@ impl<'a> HomeAssistantAPI {
 			default_value
 		}
 	}
-	fn get_nodebase(&self,nameid:&'a str, node_conf:HashMap<String, &Yaml>) -> ResultOpenHems<NodeBase<HomeAssistantAPI>> {
-		let max_power = self.get_feeder_const_float(&node_conf, "maxPower", 0.0);
-		let min_power = self.get_feeder_const_float(&node_conf, "minPower", 0.0);
-		let current_power = self.get_feeder_float(&node_conf, "currentPower", 0.0)?;
-		let is_on = self.get_feeder_bool(&node_conf, "is_on", false);
+	fn get_nodebase(&self,nameid:&'a str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<NodeBase<HomeAssistantAPI>> {
+		let max_power = self.get_feeder_const_float(node_conf, "maxPower", 0.0);
+		let min_power = self.get_feeder_const_float(node_conf, "minPower", 0.0);
+		let current_power = self.get_feeder_float(node_conf, "currentPower", 0.0)?;
+		let is_on = self.get_feeder_bool(node_conf, "is_on", false);
 		let node = node::get_nodebase(nameid, max_power, min_power, current_power, is_on)?;
 		Ok(node)
 	}
@@ -209,16 +210,23 @@ impl HomeStateUpdater for HomeAssistantAPI {
 	fn get_cycle_id(&self) -> u32 {
 		self.cycle_id
 	}
-	fn get_switch(&self, nameid:&str, node_conf:HashMap<String, &Yaml>) -> ResultOpenHems<Switch<HomeAssistantAPI>> {
+	fn get_switch(&self, nameid:&str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<Switch<HomeAssistantAPI>> {
 		// println!("HA:get_switch({nameid})");
-		let priority = self.get_feeder_const_int(&node_conf, "priority", 50);
-		let strategy_nameid = self.get_feeder_const_str(&node_conf, "strategy", "default");
+		let priority = self.get_feeder_const_int(node_conf, "priority", 50);
+		let strategy_nameid = self.get_feeder_const_str(node_conf, "strategy", "default");
 		let base = self.get_nodebase(nameid, node_conf)?;
 		node::get_switch(base, priority as u32, &strategy_nameid)
 	}
-	fn get_publicpowergrid<'a>(&'a self, nameid:&str, node_conf:HashMap<String, &Yaml>)  -> ResultOpenHems<PublicPowerGrid<'a, HomeAssistantAPI>> {
+	fn get_publicpowergrid<'a>(&'a self, nameid:&str, node_conf:&HashMap<String, &Yaml>)  -> ResultOpenHems<PublicPowerGrid<'a, HomeAssistantAPI>> {
 		let base: NodeBase<'_, HomeAssistantAPI> = self.get_nodebase(nameid, node_conf)?;
-		node::get_publicpowergrid(base, 0)
+		if let Some(contract_conf) = node_conf.get("contract") {
+			let contract = Contract::get_from_conf(contract_conf)?;
+			node::get_publicpowergrid(base, contract)
+		} else {
+			Err(OpenHemsError::new(format!(
+				"No key 'contract' in publicpowergrid configuration."
+			)))
+		}
 	}
 	fn register_entity(&mut self, nameid:&str) -> bool {
 		if !self.cached_ids.contains_key(nameid) {

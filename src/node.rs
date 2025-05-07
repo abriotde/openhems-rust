@@ -4,6 +4,7 @@ use arrayvec::ArrayString;
 use crate::error::{OpenHemsError, ResultOpenHems};
 use crate::feeder::{Feeder, SourceFeeder};
 use crate::home_assistant_api::HomeStateUpdater;
+use crate::contract::Contract;
 
 #[derive(Clone)]
 pub enum NodeType {
@@ -171,15 +172,20 @@ impl<'a, Updater:HomeStateUpdater+Clone> Node for Switch<'a, Updater> {
 	}
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)] // Clone, 
 pub struct PublicPowerGrid<'a, Updater:HomeStateUpdater+Clone> {
 	// Node
 	node: NodeBase<'a, Updater>,
 	// Outnode
 	// PublicPowerGrid
-	contract: u32
+	contract: Contract
 }
-pub fn get_publicpowergrid<Updater:HomeStateUpdater+Clone>(node: NodeBase<Updater>, contract: u32) -> ResultOpenHems<PublicPowerGrid<Updater>> {
+impl<'a, Updater:HomeStateUpdater+Clone> PublicPowerGrid<'a, Updater> {
+	pub fn get_contract(&self) -> &Contract {
+		&self.contract
+	}
+}
+pub fn get_publicpowergrid<Updater:HomeStateUpdater+Clone>(node: NodeBase<Updater>, contract: Contract) -> ResultOpenHems<PublicPowerGrid<Updater>> {
 	Ok(PublicPowerGrid {
 		node: node,
 		contract: contract

@@ -1,7 +1,7 @@
 
 // use std::time::Duration;
 // use chrono::Local;
-use datetime::{LocalTime, LocalDateTime};
+use datetime::{LocalTime, LocalDateTime, LocalDate, Month};
 use core::fmt;
 use iso8601;
 use regex::Regex;
@@ -145,7 +145,7 @@ pub struct HoursRanges {
 	range_end: LocalDateTime,
 	timeout: Option<LocalDateTime>,
 	time_start: Option<LocalDateTime>,
-	timeout_callback: Option<Box<dyn HoursRangesCallback>>, // TODO
+	timeout_callback: Option<Box<dyn HoursRangesCallback>>,
 }
 impl fmt::Debug for HoursRanges {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -155,6 +155,23 @@ impl fmt::Debug for HoursRanges {
 		}
 		write!(f, ")")
     }
+}
+impl Clone for HoursRanges {
+	fn clone(&self) -> Self {
+		let mut ranges = Vec::new();
+		for range in self.ranges.iter() {
+			ranges.push(range.clone());
+		}
+		HoursRanges {
+			index: self.index,
+			ranges: ranges,
+			min_cost: self.min_cost,
+			range_end: self.range_end,
+			timeout: self.timeout,
+			time_start: self.time_start,
+			timeout_callback: None, // TODO
+		}
+	}
 }
 fn fmt(a:&LocalTime) -> String {
 	let mut seconds = a.to_seconds();
@@ -263,10 +280,10 @@ impl HoursRanges {
 		});
 		Ok(())
 	}
-	fn is_offpeak(self, range:HoursRange) -> bool {
+	pub fn is_offpeak(&self, range:&HoursRange) -> bool {
 		self.min_cost==range.cost
 	}
-	fn get_timetowait(from:&LocalTime, to:&LocalTime) -> i64 {
+	pub fn get_timetowait(from:&LocalTime, to:&LocalTime) -> i64 {
 		// "10:00", "02:00"
 		let from_s = from.to_seconds();
 		let to_s = to.to_seconds();
@@ -277,7 +294,7 @@ impl HoursRanges {
 		dt
 		// print("getTimeToWait(",self.time,", ",nextTime,") = ",wait)
 	}
-	pub fn check_range(self, now:LocalDateTime) -> ResultOpenHems<HoursRange> {
+	pub fn check_range(&self, now:LocalDateTime) -> ResultOpenHems<&HoursRange> {
 		// Check range validity of this hoursRange
 		if let Some(time) = self.time_start {
 			if now<time {
@@ -286,7 +303,7 @@ impl HoursRanges {
 		}
 		if let Some(time) = self.timeout {
 			if now>time {
-				if let Some(cb) = self.timeout_callback {
+				if let Some(cb) = &self.timeout_callback {
 					cb.callback();
 				}
 				// return Err(OpenHemsError::new(format!("")));
@@ -296,9 +313,9 @@ impl HoursRanges {
 		// print("OffPeakStrategy.checkRange(",now,")")
 		// # This has no real signification but it's usefull and the most simple way
 		let mut time2nextrange = 3600*24; // = 24h = a full day
-		let mut currange = self.ranges[0];
+		let mut currange = &self.ranges[0];
 		let timenow = now.time();
-		for hoursrange in self.ranges {
+		for hoursrange in &self.ranges {
 			let  time = &hoursrange.end;
 			let wait= Self::get_timetowait(&timenow, time);
 			if wait<time2nextrange {
@@ -312,19 +329,22 @@ impl HoursRanges {
 
 #[cfg(test)]
 mod tests {
-	use yaml_rust2::YamlLoader;
+	use datetime::DatePiece;
+use yaml_rust2::YamlLoader;
     use super::*;
 
     #[test]
-    fn local_test() -> ResultOpenHems<()> {
+    fn test_time_hoursranges() -> ResultOpenHems<()> {
 		let configs = YamlLoader::load_from_str("[\"22h-6h\"]").unwrap();
 		let config = &configs[0];
 		let ranges = HoursRanges::from(config, 
 			None, None, None, 0.0, 1.0)?;
 		println!("{ranges}");
-		let now = LocalDateTime::now();
+		let date = LocalDate::ymd(2025, Month::April, 28).unwrap();
+		let time = LocalTime::hm(11, 00).unwrap();
+		let now = LocalDateTime::new(date, time);
 		let range = ranges.check_range(now)?;
-		// sassert_eq!(ranges.is_offpeak(range)?, false);
+		assert_eq!(ranges.is_offpeak(&range), false);
 		Ok(())
     }
 	// mael@allianz.fr

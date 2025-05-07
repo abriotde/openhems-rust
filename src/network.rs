@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use yaml_rust2::Yaml;
 use std::fmt;
-use crate::node;
+use crate::error::{OpenHemsError, ResultOpenHems};
+use crate::node::{self, PublicPowerGrid};
 use crate::home_assistant_api::HomeStateUpdater;
 use crate::cast_utility;
+use crate::time::HoursRanges;
 
 // Rust equivalent of Python nodes list with multi nodes types.
 #[derive(Clone)]
@@ -89,7 +91,7 @@ impl<'a, Updater:HomeStateUpdater+Clone> NodesHeap<'a, Updater> {
 				}
 				match &*classname.to_lowercase() {
 					"switch" => {
-						match updater.get_switch(nameid.as_str(), node_conf) {
+						match updater.get_switch(nameid.as_str(), &node_conf) {
 							Ok(node) => {
 								self.switch.push(node);
 							}
@@ -100,7 +102,7 @@ impl<'a, Updater:HomeStateUpdater+Clone> NodesHeap<'a, Updater> {
 						}
 					},
 					"publicpowergrid" => {
-						match updater.get_publicpowergrid(nameid.as_str(), node_conf) {
+						match updater.get_publicpowergrid(nameid.as_str(), &node_conf) {
 							Ok(node) => {
 								self.publicpowergrid = Some(node);
 							}
@@ -120,7 +122,7 @@ impl<'a, Updater:HomeStateUpdater+Clone> NodesHeap<'a, Updater> {
 			}
 		}
 	}
-	fn get_all_publicpowergrid(&self, _pattern:&str) -> & Option<node::PublicPowerGrid<'a, Updater>> {
+	fn get_publicpowergrid(&self) -> & Option<node::PublicPowerGrid<'a, Updater>> {
 		& self.publicpowergrid
 	}
 	fn get_all_switch(&self, _pattern:&str) -> &Vec<node::Switch<'a, Updater>> {
@@ -166,5 +168,13 @@ impl<'a, Updater> Network<'a, Updater>
 	}
 	pub fn set_nodes(&'a mut self, nodes_conf:Vec<&Yaml>) {
 		self.nodes.set_nodes(&mut self.updater, nodes_conf);
+	}
+	pub fn get_hours_ranges(&self) -> ResultOpenHems<&HoursRanges> {
+		if let Some(power) = self.nodes.get_publicpowergrid() {
+			let hoursranges = power.get_contract().get_hoursranges();
+			Ok(hoursranges)
+		} else {
+			Err(OpenHemsError::new("No public power grid.".to_string()))
+		}
 	}
 }

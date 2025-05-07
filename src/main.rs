@@ -14,6 +14,8 @@ mod network;
 mod error;
 mod  feeder;
 mod time;
+mod offpeak_strategy;
+mod contract;
 
 fn main() {
     env_logger::Builder::new()
