@@ -1,45 +1,44 @@
-use datetime::{LocalTime, LocalDateTime, LocalDate, Month};
+use datetime::LocalDateTime;
+use hashlink::linked_hash_map::LinkedHashMap;
 use crate::error::ResultOpenHems;
 use crate::network::Network;
 use crate::node::Node;
-use crate::home_assistant_api::HomeStateUpdater;
 use crate::time::{HoursRanges, HoursRange};
+use yaml_rust2::Yaml;
 
-pub trait EnergyStrategyk<'a, T:HomeStateUpdater> {
+pub trait EnergyStrategy<'a, 'b:'a, 'c:'b> {
 	fn get_strategy_id(&self) -> &str;
-	fn get_network(&self) -> &Network<'a, T>;
+	fn get_network(&self) -> &Network<'a, 'a>;
 	fn get_nodes(&self) -> &Vec<Box<dyn Node>>;
-	fn update_network(&self) -> ResultOpenHems<()>;
+	fn update_network(&self) -> ResultOpenHems<u32>;
+	fn new(network:&'c Network<'a, 'a>, id:&str, config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy<'a, 'a>>;
 }
 #[derive(Clone)]
-pub struct OffPeakStrategy<'a, T:HomeStateUpdater> {
+pub struct OffPeakStrategy<'a, 'b:'a> {
 	id: String,
 	inoffpeakrange: bool,
 	rangechangedone: bool,
 	currrange: &'a HoursRange,
 	hoursranges: &'a HoursRanges,
 	nextranges: Vec<HoursRange>,
-	network: &'a Network<'a, T>
+	network: &'b Network<'a, 'a>
 }
 
-impl<'a, T:HomeStateUpdater> EnergyStrategyk<'a, T> for OffPeakStrategy<'a, T> {
+impl<'a, 'b:'a, 'c:'b, 'd:'c> EnergyStrategy<'a, 'b, 'c> for OffPeakStrategy<'a, 'a> {
 	fn get_strategy_id(&self) -> &str {
 		&self.id
 	}
-	fn get_network(&self) -> &Network<'a, T> {
+	fn get_network(&self) -> &Network<'a, 'a> {
 		self.network
 	}
 	fn get_nodes(&self) -> &Vec<Box<dyn Node>> {
 		todo!();
 	}
-	fn update_network(&self) -> ResultOpenHems<()>{
+	fn update_network(&self) -> ResultOpenHems<u32>{
 		todo!();
-		Ok(())
+		// Ok(0)
 	}
-}
-	
-impl<'a, T:HomeStateUpdater> OffPeakStrategy<'a, T> {
-	pub fn new(network:&'a Network<'a, T>, id:&str) -> ResultOpenHems<OffPeakStrategy<'a, T>>{
+	fn new(network:&'b Network<'a, 'a>, id:&str, _config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy<'a, 'a>> {
 		let hoursranges = network.get_hours_ranges()?;
 		let now = LocalDateTime::now();
 		let range = hoursranges.check_range(now)?;
@@ -52,5 +51,11 @@ impl<'a, T:HomeStateUpdater> OffPeakStrategy<'a, T> {
 			nextranges: Vec::new(),
 			network: network
 		})
+	}
+}
+
+impl<'a, 'b:'a, 'c:'b, 'd:'c> OffPeakStrategy<'a, 'a> {
+	pub fn get_id(&self) -> &str {
+		&self.id
 	}
 }

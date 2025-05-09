@@ -5,6 +5,8 @@ use crate::error::{OpenHemsError, ResultOpenHems};
 use crate::feeder::{Feeder, SourceFeeder};
 use crate::home_assistant_api::HomeStateUpdater;
 use crate::contract::Contract;
+use crate::network::Network;
+use crate::server::Server;
 
 #[derive(Clone)]
 pub enum NodeType {
@@ -53,8 +55,8 @@ pub trait Node {
 	fn get_id(&self) -> &str;
 	fn get_min_power(&mut self) -> f32;
 	fn get_max_power(&mut self) -> f32;
-	fn get_current_power(&mut self) -> f32;
-	fn is_on(&mut self) -> bool;
+	fn get_current_power(&mut self) -> ResultOpenHems<f32>;
+	fn is_on(&mut self) -> ResultOpenHems<bool>;
 	fn is_activate(&mut self) -> bool;
 }
 impl fmt::Display for dyn Node {
@@ -70,17 +72,27 @@ impl fmt::Debug for dyn Node {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct NodeBase<'a, Updater:HomeStateUpdater+Clone> {
+#[derive(Clone)]
+pub struct NodeBase<'a, 'b:'a> {
 	nameid: ArrayString<16>,
 	max_power: f32,
 	min_power: f32,
-	current_power: SourceFeeder<'a, Updater, f32>,
+	current_power: SourceFeeder<'a, f32>,
 	is_activate: bool,
-	is_on: bool
+	is_on: SourceFeeder<'a, bool>,
+	network: &'b Network<'a, 'a>
+}
+impl<'a, 'b:'a, 'c:'b> fmt::Debug for NodeBase<'a, 'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+	{
+		write!(f, "id:{}, maxPower:{}, , minPower:{}, activ:{}, on:",
+			self.nameid, self.max_power, self.min_power, self.is_activate, 
+		)
+    }
 }
 
-pub fn get_nodebase<'a, Updater:HomeStateUpdater+Clone>(nameid: &str, max_power: f32, min_power: f32, current_power:SourceFeeder<'a, Updater, f32>, is_on:bool) -> ResultOpenHems<NodeBase<'a, Updater>> {
+pub fn get_nodebase<'a, 'b:'a, 'c:'b>(network:&'a Network, nameid: &str, max_power: f32, min_power: f32, current_power:SourceFeeder<'a, f32>, is_on:SourceFeeder<'a, bool>)
+		-> ResultOpenHems<NodeBase<'a, 'a>> {
 	if let Ok(name) = ArrayString::from(nameid) {
 		Ok(NodeBase {
 			nameid: name,
@@ -88,13 +100,14 @@ pub fn get_nodebase<'a, Updater:HomeStateUpdater+Clone>(nameid: &str, max_power:
 			min_power: min_power,
 			current_power: current_power,
 			is_activate: true,
-			is_on: is_on
+			is_on: is_on,
+			network: network
 		})
 	} else {
 		Err(OpenHemsError::new(format!("'id' is to long (Limit is 16) for node {nameid}.")))
 	}
 }
-impl<'a, Updater:HomeStateUpdater+Clone> Node for NodeBase<'a, Updater> {
+impl<'a, 'b:'a, 'c:'b> Node for NodeBase<'a, 'a> {
     // Attributes
 	fn get_id(&self) -> &str {
 		&self.nameid
@@ -105,11 +118,11 @@ impl<'a, Updater:HomeStateUpdater+Clone> Node for NodeBase<'a, Updater> {
     fn get_max_power(&mut self) -> f32 {
 		self.max_power
 	}
-    fn get_current_power(&mut self) -> f32 {
-		self.current_power.get_value().unwrap()
+    fn get_current_power(&mut self) -> ResultOpenHems<f32> {
+		Ok(self.current_power.get_value()?)
 	}
-    fn is_on(&mut self) -> bool {
-		self.is_on
+    fn is_on(&mut self) -> ResultOpenHems<bool> {
+		Ok(self.is_on.get_value()?)
 	}
     fn is_activate(&mut self) -> bool {
 		self.is_activate
@@ -120,16 +133,16 @@ impl<'a, Updater:HomeStateUpdater+Clone> Node for NodeBase<'a, Updater> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Switch<'a, Updater:HomeStateUpdater+Clone> {
+pub struct Switch<'a> {
 	// Node
-	node: NodeBase<'a, Updater>,
+	node: NodeBase<'a, 'a>,
 	// Outnode
 	// Switch
 	pritority: u32,
 	strategy_nameid: ArrayString<16>,
 	schedule: u32
 }
-pub fn get_switch<'a, Updater:HomeStateUpdater+Clone>(node: NodeBase<'a, Updater>, pritority: u32, strategy_nameid: &str) -> ResultOpenHems<Switch<'a, Updater>> {
+pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase<'a, 'a>, pritority: u32, strategy_nameid: &str) -> ResultOpenHems<Switch<'a>> {
 	if let Ok(strategy) = ArrayString::from(strategy_nameid) {
 		Ok(Switch {
 			node: node,
@@ -141,13 +154,13 @@ pub fn get_switch<'a, Updater:HomeStateUpdater+Clone>(node: NodeBase<'a, Updater
 		Err(OpenHemsError::new("Strategy is to long (Limit is 16)".to_string()))
 	}
 }
-impl<'a, Updater:HomeStateUpdater+Clone> Deref for Switch<'a, Updater> {
-    type Target = NodeBase<'a, Updater>;
-    fn deref(&self) -> &NodeBase<'a, Updater> {
+impl<'a, 'b:'a, 'c:'b> Deref for Switch<'a> {
+    type Target = NodeBase<'a, 'a>;
+    fn deref(&self) -> &NodeBase<'a, 'a> {
         &self.node
     }
 }
-impl<'a, Updater:HomeStateUpdater+Clone> Node for Switch<'a, Updater> {
+impl<'a, 'b:'a, 'c:'b> Node for Switch<'a> {
     // Attributes
 	fn get_id(&self) -> &str {
 		self.node.get_id()
@@ -158,10 +171,10 @@ impl<'a, Updater:HomeStateUpdater+Clone> Node for Switch<'a, Updater> {
     fn get_max_power(&mut self) -> f32 {
 		self.node.get_max_power()
 	}
-    fn get_current_power(&mut self) -> f32 {
+    fn get_current_power(&mut self) -> ResultOpenHems<f32> {
 		self.node.get_current_power()
 	}
-    fn is_on(&mut self) -> bool {
+    fn is_on(&mut self) -> ResultOpenHems<bool> {
 		self.node.is_on()
 	}
     fn is_activate(&mut self) -> bool {
@@ -173,31 +186,31 @@ impl<'a, Updater:HomeStateUpdater+Clone> Node for Switch<'a, Updater> {
 }
 
 #[derive(Debug, Clone)] // Clone, 
-pub struct PublicPowerGrid<'a, Updater:HomeStateUpdater+Clone> {
+pub struct PublicPowerGrid<'a> {
 	// Node
-	node: NodeBase<'a, Updater>,
+	node: NodeBase<'a, 'a>,
 	// Outnode
 	// PublicPowerGrid
 	contract: Contract
 }
-impl<'a, Updater:HomeStateUpdater+Clone> PublicPowerGrid<'a, Updater> {
+impl<'a, 'b:'a, 'c:'b> PublicPowerGrid<'a> {
 	pub fn get_contract(&self) -> &Contract {
 		&self.contract
 	}
 }
-pub fn get_publicpowergrid<Updater:HomeStateUpdater+Clone>(node: NodeBase<Updater>, contract: Contract) -> ResultOpenHems<PublicPowerGrid<Updater>> {
+pub fn get_publicpowergrid<'a, 'b:'a, 'c:'b>(node: NodeBase<'a, 'a>, contract: Contract) -> ResultOpenHems<PublicPowerGrid<'a>> {
 	Ok(PublicPowerGrid {
 		node: node,
 		contract: contract
 	})
 }
-impl<'a, Updater:HomeStateUpdater+Clone> Deref for PublicPowerGrid<'a, Updater> {
-    type Target = NodeBase<'a, Updater>;
-    fn deref(&self) -> &NodeBase<'a, Updater> {
+impl<'a, 'b:'a, 'c:'b> Deref for PublicPowerGrid<'a> {
+    type Target = NodeBase<'a, 'a>;
+    fn deref(&self) -> &NodeBase<'a, 'a> {
         &self.node
     }
 }
-impl<'a, Updater:HomeStateUpdater+Clone> Node for PublicPowerGrid<'a, Updater> {
+impl<'a, 'b:'a, 'c:'b> Node for PublicPowerGrid<'a> {
     // Attributes
 	fn get_id(&self) -> &str {
 		self.node.get_id()
@@ -208,10 +221,10 @@ impl<'a, Updater:HomeStateUpdater+Clone> Node for PublicPowerGrid<'a, Updater> {
     fn get_max_power(&mut self) -> f32 {
 		self.node.get_max_power()
 	}
-    fn get_current_power(&mut self) -> f32 {
+    fn get_current_power(&mut self) -> ResultOpenHems<f32> {
 		self.node.get_current_power()
 	}
-    fn is_on(&mut self) -> bool {
+    fn is_on(&mut self) -> ResultOpenHems<bool> {
 		self.node.is_on()
 	}
     fn is_activate(&mut self) -> bool {

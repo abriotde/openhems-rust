@@ -59,6 +59,9 @@ impl ConfigurationManager {
 		self.add("", doc, init);
 		Ok(())
 	}
+	pub fn get(&self, key:&str) -> Option<&Box<Yaml>>{
+		self.conf.get(key)
+	}
 	pub fn get_as_str(&self, key:&str) -> String {
 		if let Some(value) = self.conf.get(key) {
 			cast_utility::to_type_str(value)

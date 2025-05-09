@@ -1,6 +1,7 @@
 use arrayvec::ArrayString;
 use crate::error::OpenHemsError;
 
+use crate::home_assistant_api::HomeAssistantAPI;
 use crate::{error::ResultOpenHems, home_assistant_api::HomeStateUpdater};
 
 pub trait FeederOutType<T:Clone> {
@@ -21,20 +22,25 @@ impl FeederOutType<String> for String {
 		String::from("")
 	}
 }
+impl FeederOutType<bool> for bool {
+	fn default() -> bool {
+		true
+	}
+}
 pub trait Feeder {
 	type Item:FeederOutType<Self::Item>+Clone;
 	fn get_value(&mut self) -> ResultOpenHems<Self::Item>;
 }
 
 #[derive(Debug)]
-pub struct SourceFeeder<'a, Updater:HomeStateUpdater, T:FeederOutType<T>+Clone> {
+pub struct SourceFeeder<'a, T:FeederOutType<T>+Clone> {
 	nameid: ArrayString<64>, // Home Assistant  entity id are long (sensor.lixee_zlinky_tic_puissance_apparente)
-	source: &'a Updater,
+	source: &'a HomeAssistantAPI<'a, 'a>,
 	cycle_id:u32,
 	value: T
 }
-impl<'a, Updater:HomeStateUpdater, T:FeederOutType<T>+Clone> Clone for SourceFeeder<'a, Updater, T> {
-    fn clone(&self) -> SourceFeeder<'a, Updater, T> {
+impl<'a, 'b:'a, T:FeederOutType<T>+Clone> Clone for SourceFeeder<'a, T> {
+    fn clone(&self) -> SourceFeeder<'a, T> {
         SourceFeeder {
 			nameid: self.nameid,
 			source: self.source,
@@ -43,8 +49,8 @@ impl<'a, Updater:HomeStateUpdater, T:FeederOutType<T>+Clone> Clone for SourceFee
 		}
     }
 }
-impl<'a, Updater:HomeStateUpdater, T:FeederOutType<T>+Clone> SourceFeeder<'a, Updater, T> {
-	pub fn new(updater:&'a Updater, entity_id:&str) -> ResultOpenHems<SourceFeeder<'a, Updater, T>> {
+impl<'a, 'b:'a, T:FeederOutType<T>+Clone> SourceFeeder<'a, T> {
+	pub fn new(updater:&'a HomeAssistantAPI, entity_id:&str) -> ResultOpenHems<SourceFeeder<'a, T>> {
 		let nameid = ArrayString::from(entity_id)
 			.map_err(|message| OpenHemsError::new(
 				format!("Entity id '{entity_id}' is too long : {}", message.to_string())
@@ -57,7 +63,7 @@ impl<'a, Updater:HomeStateUpdater, T:FeederOutType<T>+Clone> SourceFeeder<'a, Up
 		})
 	}
 }
-impl<'a, Updater:HomeStateUpdater> Feeder for SourceFeeder<'a, Updater, i32> {
+impl<'a, 'b:'a> Feeder for SourceFeeder<'a, i32> {
 	type Item = i32;
 	fn get_value(&mut self) -> ResultOpenHems<Self::Item> {
 		if self.cycle_id <= self.source.get_cycle_id() {
@@ -66,7 +72,7 @@ impl<'a, Updater:HomeStateUpdater> Feeder for SourceFeeder<'a, Updater, i32> {
 		Ok(self.value)
 	}
 }
-impl<'a, Updater:HomeStateUpdater> Feeder for SourceFeeder<'a, Updater, f32> {
+impl<'a, 'b:'a> Feeder for SourceFeeder<'a, f32> {
 	type Item = f32;
 	fn get_value(&mut self) -> ResultOpenHems<Self::Item> {
 		if self.cycle_id <= self.source.get_cycle_id() {
@@ -75,11 +81,20 @@ impl<'a, Updater:HomeStateUpdater> Feeder for SourceFeeder<'a, Updater, f32> {
 		Ok(self.value)
 	}
 }
-impl<'a, Updater:HomeStateUpdater> Feeder for SourceFeeder<'a, Updater, String> {
+impl<'a, 'b:'a, 'c:'b> Feeder for SourceFeeder<'a, String> {
 	type Item = String;
 	fn get_value(&mut self) -> ResultOpenHems<Self::Item> {
 		if self.cycle_id <= self.source.get_cycle_id() {
 			self.value = self.source.get_entity_value_str(&self.nameid)?
+		}
+		Ok(self.value.clone())
+	}
+}
+impl<'a, 'b:'a, 'c:'b> Feeder for SourceFeeder<'a, bool> {
+	type Item = bool;
+	fn get_value(&mut self) -> ResultOpenHems<Self::Item> {
+		if self.cycle_id <= self.source.get_cycle_id() {
+			self.value = self.source.get_entity_value_bool(&self.nameid)?
 		}
 		Ok(self.value.clone())
 	}

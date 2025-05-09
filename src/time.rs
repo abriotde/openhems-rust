@@ -175,9 +175,9 @@ impl Clone for HoursRanges {
 }
 fn fmt(a:&LocalTime) -> String {
 	let mut seconds = a.to_seconds();
-	let  hours = (seconds/3600);
+	let  hours = seconds/3600;
 	seconds -= hours*3600;
-	let  min = (seconds/60);
+	let  min = seconds/60;
 	format!("{hours}h{min}")
 }
 	
