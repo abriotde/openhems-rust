@@ -1,12 +1,11 @@
 use core::fmt;
+use std::fmt::Debug;
 use std::ops::Deref;
 use arrayvec::ArrayString;
 use crate::error::{OpenHemsError, ResultOpenHems};
 use crate::feeder::{Feeder, SourceFeeder};
-use crate::home_assistant_api::HomeStateUpdater;
 use crate::contract::Contract;
 use crate::network::Network;
-use crate::server::Server;
 
 #[derive(Clone)]
 pub enum NodeType {
@@ -79,10 +78,10 @@ pub struct NodeBase<'a, 'b:'a> {
 	min_power: f32,
 	current_power: SourceFeeder<'a, f32>,
 	is_activate: bool,
-	is_on: SourceFeeder<'a, bool>,
-	network: &'b Network<'a, 'a>
+	is_on: Feeder<'a, bool>,
+	network: &'b Network<'a>
 }
-impl<'a, 'b:'a, 'c:'b> fmt::Debug for NodeBase<'a, 'a> {
+impl<'a, 'b:'a, 'c:'b> Debug for NodeBase<'a, 'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
 	{
 		write!(f, "id:{}, maxPower:{}, , minPower:{}, activ:{}, on:",
@@ -91,7 +90,7 @@ impl<'a, 'b:'a, 'c:'b> fmt::Debug for NodeBase<'a, 'a> {
     }
 }
 
-pub fn get_nodebase<'a, 'b:'a, 'c:'b>(network:&'a Network, nameid: &str, max_power: f32, min_power: f32, current_power:SourceFeeder<'a, f32>, is_on:SourceFeeder<'a, bool>)
+pub fn get_nodebase<'a>(network:&'a Network, nameid: &str, max_power: f32, min_power: f32, current_power:SourceFeeder<'a, f32>, is_on:Feeder<'a, bool>)
 		-> ResultOpenHems<NodeBase<'a, 'a>> {
 	if let Ok(name) = ArrayString::from(nameid) {
 		Ok(NodeBase {
@@ -185,7 +184,7 @@ impl<'a, 'b:'a, 'c:'b> Node for Switch<'a> {
 	}
 }
 
-#[derive(Debug, Clone)] // Clone, 
+#[derive(Clone, Debug)] // Clone, 
 pub struct PublicPowerGrid<'a> {
 	// Node
 	node: NodeBase<'a, 'a>,

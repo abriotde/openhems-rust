@@ -6,7 +6,7 @@ use log;
 use chrono;
 use env_logger;
 use server::Server;
-use std::io::Write;
+use std::{io::Write, rc::Rc};
 
 mod utils;
 mod home_assistant_api;
@@ -43,13 +43,25 @@ fn main() {
 	if let Err(err) = configurator.add_yaml_config(file_path, false) {
 		log::error!("Fail load configuration {file_path} : {err}");
 	}
-	if let Ok(mut network) = Network::new(&configurator) {
-		network.get_nodes(&configurator);
-		// println!("{}", network);
-		if let Ok(mut server) = Server::new(&network, &configurator) {
-			// network.set_server(&server);
-			let now = LocalDateTime::now();
-			server.loop1(now);
+	match Network::new(&configurator) {
+		Ok(network) => {
+			let nodes = network.get_nodes(&configurator);
+			let mut network2 = network.clone();
+			network2.set_nodes(nodes);
+			println!("{}", network);
+			match Server::new(&network, &configurator) {
+				Ok(mut hems_server) => {
+					network2.set_server(Rc::new(&hems_server));
+					let now = LocalDateTime::now();
+					hems_server.loop1(now);
+				}
+				Err(err) => {
+					log::error!("Fail load Network : {}", err.message)
+				}
+			}
+		}
+		Err(err) => {
+			log::error!("Fail load Network : {}", err.message)
 		}
 	}
 }

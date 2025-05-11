@@ -27,19 +27,33 @@ impl FeederOutType<bool> for bool {
 		true
 	}
 }
-pub trait Feeder {
-	type Item:FeederOutType<Self::Item>+Clone;
-	fn get_value(&mut self) -> ResultOpenHems<Self::Item>;
+#[derive(Clone, Debug, Copy)]
+pub enum Feeder<'a, T:FeederOutType<T>+Clone> {
+	Source(SourceFeeder<'a, T>),
+	Const(ConstFeeder<T>)
+}
+impl<'a> Feeder<'a, bool> {
+	pub fn get_value(&mut self) -> ResultOpenHems<bool> {
+		match self {
+			Feeder::Source(mut feeder) => {
+				feeder.get_value()
+			}
+			Feeder::Const(mut feeder) => {
+				feeder.get_value()
+			}
+		}
+	}
 }
 
-#[derive(Debug)]
+// #[derive(Debug, Clone)] // , Clone implemented manually
+#[derive(Clone, Debug, Copy)]
 pub struct SourceFeeder<'a, T:FeederOutType<T>+Clone> {
 	nameid: ArrayString<64>, // Home Assistant  entity id are long (sensor.lixee_zlinky_tic_puissance_apparente)
 	source: &'a HomeAssistantAPI<'a, 'a>,
 	cycle_id:u32,
 	value: T
 }
-impl<'a, 'b:'a, T:FeederOutType<T>+Clone> Clone for SourceFeeder<'a, T> {
+/* impl<'a, 'b:'a, T:FeederOutType<T>+Clone> Clone for SourceFeeder<'a, T> {
     fn clone(&self) -> SourceFeeder<'a, T> {
         SourceFeeder {
 			nameid: self.nameid,
@@ -48,7 +62,7 @@ impl<'a, 'b:'a, T:FeederOutType<T>+Clone> Clone for SourceFeeder<'a, T> {
 			value: self.value.clone(),
 		}
     }
-}
+} */
 impl<'a, 'b:'a, T:FeederOutType<T>+Clone> SourceFeeder<'a, T> {
 	pub fn new(updater:&'a HomeAssistantAPI, entity_id:&str) -> ResultOpenHems<SourceFeeder<'a, T>> {
 		let nameid = ArrayString::from(entity_id)
@@ -63,50 +77,73 @@ impl<'a, 'b:'a, T:FeederOutType<T>+Clone> SourceFeeder<'a, T> {
 		})
 	}
 }
-impl<'a, 'b:'a> Feeder for SourceFeeder<'a, i32> {
-	type Item = i32;
-	fn get_value(&mut self) -> ResultOpenHems<Self::Item> {
+/* impl<'a, T:FeederOutType<T>+Clone> SourceFeeder<'a, T> {
+	pub fn get_value(&mut self) -> ResultOpenHems<T> {
+		Ok(T::default())
+	}
+} */
+impl<'a> SourceFeeder<'a, i32> {
+	pub fn get_value(&mut self) -> ResultOpenHems<i32> {
 		if self.cycle_id <= self.source.get_cycle_id() {
 			self.value = self.source.get_entity_value_int(&self.nameid)?
 		}
 		Ok(self.value)
 	}
 }
-impl<'a, 'b:'a> Feeder for SourceFeeder<'a, f32> {
-	type Item = f32;
-	fn get_value(&mut self) -> ResultOpenHems<Self::Item> {
+impl<'a> SourceFeeder<'a, f32> {
+	pub fn get_value(&mut self) -> ResultOpenHems<f32> {
 		if self.cycle_id <= self.source.get_cycle_id() {
 			self.value = self.source.get_entity_value_float(&self.nameid)?
 		}
 		Ok(self.value)
 	}
 }
-impl<'a, 'b:'a, 'c:'b> Feeder for SourceFeeder<'a, String> {
-	type Item = String;
-	fn get_value(&mut self) -> ResultOpenHems<Self::Item> {
+impl<'a> SourceFeeder<'a, String> {
+	pub fn get_value(&mut self) -> ResultOpenHems<String> {
 		if self.cycle_id <= self.source.get_cycle_id() {
 			self.value = self.source.get_entity_value_str(&self.nameid)?
 		}
 		Ok(self.value.clone())
 	}
 }
-impl<'a, 'b:'a, 'c:'b> Feeder for SourceFeeder<'a, bool> {
-	type Item = bool;
-	fn get_value(&mut self) -> ResultOpenHems<Self::Item> {
+impl<'a> SourceFeeder<'a, bool> {
+	pub fn get_value(&mut self) -> ResultOpenHems<bool> {
 		if self.cycle_id <= self.source.get_cycle_id() {
 			self.value = self.source.get_entity_value_bool(&self.nameid)?
 		}
+		Ok(self.value)
+	}
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct ConstFeeder<T:FeederOutType<T>+Clone> {
+	value: T
+}
+impl<T:FeederOutType<T>+Clone> ConstFeeder<T> {
+	pub fn new(value:T) -> ConstFeeder<T> {
+		ConstFeeder {
+			value: value
+		}
+	}
+	pub fn get_value(&mut self) -> ResultOpenHems<T> {
 		Ok(self.value.clone())
 	}
 }
 
-#[derive(Clone, Debug)]
-pub struct ConstFeeder<T:FeederOutType<T>+Clone> {
-	value: T
+/* #[derive(Clone, Debug)]
+pub struct GuessIsOnFeeder<T:FeederOutType<T>+Clone> {
+	source: Feeder<Feeder<T>>
 }
-impl<T:FeederOutType<T>+Clone> Feeder for ConstFeeder<T> {
-	type Item = T;
-	fn get_value(&mut self) -> ResultOpenHems<T> {
-		Ok(self.value.clone())
+impl<'a, 'b:'a, T:FeederOutType<T>+Clone> Clone for GuessIsOnFeeder<T> {
+    fn clone(&self) -> GuessIsOnFeeder<T> {
+        GuessIsOnFeeder {
+			source: self.source.clone()
+		}
+    }
+}
+impl Feeder for GuessIsOnFeeder<bool> {
+	type Item = bool;
+	fn get_value(&mut self) -> ResultOpenHems<bool> {
+		self.source.get_value()
 	}
-}
+} */

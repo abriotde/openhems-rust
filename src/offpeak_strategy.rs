@@ -8,10 +8,10 @@ use yaml_rust2::Yaml;
 
 pub trait EnergyStrategy<'a, 'b:'a, 'c:'b> {
 	fn get_strategy_id(&self) -> &str;
-	fn get_network(&self) -> &Network<'a, 'a>;
+	fn get_network(&self) -> &Network<'a>;
 	fn get_nodes(&self) -> &Vec<Box<dyn Node>>;
 	fn update_network(&self) -> ResultOpenHems<u32>;
-	fn new(network:&'c Network<'a, 'a>, id:&str, config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy<'a, 'a>>;
+	fn new(network:&'c Network<'a>, id:&str, config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy<'a, 'a>>;
 }
 #[derive(Clone)]
 pub struct OffPeakStrategy<'a, 'b:'a> {
@@ -21,14 +21,14 @@ pub struct OffPeakStrategy<'a, 'b:'a> {
 	currrange: &'a HoursRange,
 	hoursranges: &'a HoursRanges,
 	nextranges: Vec<HoursRange>,
-	network: &'b Network<'a, 'a>
+	network: &'b Network<'a>
 }
 
 impl<'a, 'b:'a, 'c:'b, 'd:'c> EnergyStrategy<'a, 'b, 'c> for OffPeakStrategy<'a, 'a> {
 	fn get_strategy_id(&self) -> &str {
 		&self.id
 	}
-	fn get_network(&self) -> &Network<'a, 'a> {
+	fn get_network(&self) -> &Network<'a> {
 		self.network
 	}
 	fn get_nodes(&self) -> &Vec<Box<dyn Node>> {
@@ -38,7 +38,7 @@ impl<'a, 'b:'a, 'c:'b, 'd:'c> EnergyStrategy<'a, 'b, 'c> for OffPeakStrategy<'a,
 		todo!();
 		// Ok(0)
 	}
-	fn new(network:&'b Network<'a, 'a>, id:&str, _config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy<'a, 'a>> {
+	fn new(network:&'b Network<'a>, id:&str, _config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy<'a, 'a>> {
 		let hoursranges = network.get_hours_ranges()?;
 		let now = LocalDateTime::now();
 		let range = hoursranges.check_range(now)?;

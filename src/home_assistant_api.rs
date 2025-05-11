@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::format};
+use std::collections::HashMap;
 use reqwest;
 use json::{self, JsonValue, object::Object};
 use yaml_rust2::Yaml;
@@ -6,7 +6,10 @@ use core::fmt;
 use std::io::Read;
 use serde_json::json;
 use crate::{
-	cast_utility, configuration_manager::ConfigurationManager, contract::Contract, error::{OpenHemsError, ResultOpenHems}, feeder::SourceFeeder, network::{self, Network}, node::{self, NodeBase, PublicPowerGrid, Switch}
+	cast_utility, configuration_manager::ConfigurationManager,
+	error::{OpenHemsError, ResultOpenHems},
+	feeder::{ConstFeeder, Feeder, SourceFeeder},
+	network::Network, node::{self, NodeBase}
 };
 
 pub trait HomeStateUpdater:Clone
@@ -39,7 +42,7 @@ pub trait HomeStateUpdater:Clone
 pub struct HomeAssistantAPI<'a, 'b:'a> {
     token: String,
     url: String,
-    network: Option<&'b Network<'a,'a>>,
+    network: Option<&'b Network<'a>>,
     cached_ids: HashMap<String, JsonValue>,
 	ha_elements: HashMap<String, Object>,
 	cycle_id:u32
@@ -62,8 +65,8 @@ impl<'a, 'b:'a, 'c:'b> HomeAssistantAPI<'a, 'b> {
 		let url = configurator.get_as_str("api.url");
 		let token = configurator.get_as_str("api.long_lived_token");
 		let mut updater = HomeAssistantAPI {
-			token: url,
-			url: token,
+			token: token,
+			url: url,
 			network: None,
 			cached_ids: HashMap::new(),
 			ha_elements: HashMap::new(),
@@ -161,11 +164,16 @@ impl<'a, 'b:'a, 'c:'b> HomeAssistantAPI<'a, 'b> {
 			Err(OpenHemsError::new(format!("No  key '{key}'")))
 		}
 	}
-	pub fn get_nodebase(&'a self, network:&'b Network, nameid:&str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<NodeBase<'a, 'a>> {
+	pub fn get_nodebase(&'a self, network:&'a Network, nameid:&str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<NodeBase<'a, 'a>> {
 		let max_power = self.get_feeder_const_float(node_conf, "maxPower", 0.0);
 		let min_power = self.get_feeder_const_float(node_conf, "minPower", 0.0);
-		let current_power = self.get_feeder_float(node_conf, "currentPower", 0.0)?;
-		let is_on = self.get_feeder_bool(node_conf, "is_on", false)?;
+		let current_power: SourceFeeder<'a, f32> = self.get_feeder_float(node_conf, "currentPower", 0.0)?;
+		let is_on:Feeder<bool>;
+		if let Ok(source_feeder) = self.get_feeder_bool(node_conf, "isOn", false) {
+			is_on = Feeder::Source(source_feeder);
+		} else {
+			is_on = Feeder::Const(ConstFeeder::new(true));
+		}
 		let node = node::get_nodebase(network, nameid, max_power, min_power, current_power, is_on)?;
 		Ok(node)
 	}

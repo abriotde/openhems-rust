@@ -1,7 +1,8 @@
 use core::net;
 use std::collections::HashMap;
+use std::rc::Rc;
 use yaml_rust2::Yaml;
-use std::fmt;
+use std::fmt::{self, Display};
 use crate::configuration_manager::ConfigurationManager;
 use crate::contract::Contract;
 use crate::error::{OpenHemsError, ResultOpenHems};
@@ -19,11 +20,12 @@ pub struct NodesHeap<'a> {
 	// solarpanel: Vec<node::SolarPanel>,
 	// battery: Vec<node::Battery>,
 }
-struct NodesHeapIterator<'a> {
+#[derive(Clone, Debug)]
+struct NodesHeapIterator<'a, 'b> {
 	nodetype: node::NodeType,
 	index:usize,
 	filter: String,
-	heap: &'a NodesHeap<'a>
+	heap: &'b NodesHeap<'a>
 }
 /* impl<'a> fmt::Debug for NodesHeap<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
@@ -66,7 +68,7 @@ struct NodesHeapIterator<'a> {
 		}
     }
 } */
-impl<'a> Iterator for NodesHeapIterator<'a> {
+impl<'a, 'b:'a> Iterator for NodesHeapIterator<'a, 'b> {
     type Item = Box<&'a dyn Node>;
 	fn next(&mut self) -> Option<Self::Item> {
 		match self.nodetype {
@@ -107,7 +109,7 @@ impl<'a, 'b:'a> NodesHeap<'a> {
 			// battery: Vec<node::Battery>,
 		}
 	}
-	pub fn get_all(&'b self) -> NodesHeapIterator<'a>
+	pub fn get_all(&'b self) -> NodesHeapIterator<'a, 'a>
 	{
 		NodesHeapIterator {
 			nodetype: node::NodeType::PublicPowerGrid,
@@ -116,7 +118,7 @@ impl<'a, 'b:'a> NodesHeap<'a> {
 			heap: self,
 		}
 	}
-	pub fn set_switch(&mut self, network:&'b Network<'a, 'a>, nameid:&str, updater:&'a HomeAssistantAPI, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<()> {
+	pub fn set_switch(&mut self, network:&'b Network<'a>, nameid:&str, updater:&'a HomeAssistantAPI, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<()> {
 		// println!("HA:get_switch({nameid})");
 		let priority = updater.get_feeder_const_int(node_conf, "priority", 50);
 		let strategy_nameid = updater.get_feeder_const_str(node_conf, "strategy", "default");
@@ -125,7 +127,7 @@ impl<'a, 'b:'a> NodesHeap<'a> {
 		self.switch.push(switch);
 		Ok(())
 	}
-	pub fn set_publicpowergrid(&mut self, network:&'b Network<'a, 'a>, nameid:&str, updater:&'a HomeAssistantAPI, node_conf:&HashMap<String, &Yaml>)  -> ResultOpenHems<()> {
+	pub fn set_publicpowergrid(&mut self, network:&'b Network<'a>, nameid:&str, updater:&'a HomeAssistantAPI, node_conf:&HashMap<String, &Yaml>)  -> ResultOpenHems<()> {
 		let base = updater.get_nodebase(network, nameid, node_conf)?;
 		if let Some(contract_conf) = node_conf.get("contract") {
 			let contract = Contract::get_from_conf(contract_conf)?;
@@ -146,36 +148,34 @@ impl<'a, 'b:'a> NodesHeap<'a> {
 	}
 }
 
-#[derive(Clone)]
-pub struct Network<'a, 'b:'a> {
+#[derive(Clone, Debug)]
+pub struct Network<'a> {
     updater: HomeAssistantAPI<'a, 'a>,
     nodes: NodesHeap<'a>,
     margin_power_on: f32,
 	margin_power_on_cache_id: u32,
-	server: Option<&'b Server<'a, 'a>>
+	server: Option<Rc<&'a Server<'a, 'a>>>
 }
-/* impl<'a, 'b:'a> fmt::Display for Network<'a, 'a> {
+impl<'a, 'b:'a> Display for Network<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Use `self.number` to refer to each positional data point.
-        write!(f, "Network<{}> (\n", self.updater)?;
-        for node in self.nodes.get_all() {
-			write!(f, " - {}\n", node)?;
-		}
-		write!(f, ")")
+        write!(f, "Network<{:?}> (\n{:?}\n)", self.updater, self.nodes)
     }
-} */
+}
 
-impl<'a, 'b:'a, 'c:'b> Network<'a, 'a>
+impl<'a, 'b:'a, 'c:'b> Network<'a>
 {
-	pub fn set_server(&mut self, server:&'b Server<'a, 'a>) {
+	pub fn set_server(&mut self, server:Rc<&'a Server<'a, 'a>>) {
 		self.server = Some(server);
+	}
+	pub fn set_nodes(&mut self, nodes:NodesHeap<'a>) {
+		self.nodes = nodes;
 	}
 	pub fn new(configurator:&'a ConfigurationManager) -> ResultOpenHems<Self> {
 		let margin_power_on = 0.0;
 		let margin_power_on_cache_id = 0;
 		let network_source = configurator.get_as_str("server.network");
 		let updater:HomeAssistantAPI;
-		let mut nodes = NodesHeap::new();
 		match network_source.as_str() {
 			"homeassistant" => {
 				// println!("Network: HomeAssistantAPI");
@@ -190,7 +190,7 @@ impl<'a, 'b:'a, 'c:'b> Network<'a, 'a>
 				return Err(OpenHemsError::new("Invalid server.network configuration '{networkSource}'".to_string()));
 			}
 		}
-		let mut network = Network {
+		let network = Network {
 			updater: updater,
 			nodes: NodesHeap::new(),
 			margin_power_on: margin_power_on,
@@ -199,10 +199,10 @@ impl<'a, 'b:'a, 'c:'b> Network<'a, 'a>
 		};
 		Ok(network)
 	}
-	pub fn get_nodes(&'b self, configurator:&ConfigurationManager) -> ResultOpenHems<NodesHeap<'a>>{
+	pub fn get_nodes(&'b self, configurator:&ConfigurationManager) -> NodesHeap<'a> {
 		let nodes_conf = configurator.get_as_list("network.nodes");
 		let count = 0;
-		let mut nodes= self.nodes.clone();
+		let mut nodes= NodesHeap::new();
 		for node_c in nodes_conf {
 			let node_conf: HashMap<String, &Yaml> = cast_utility::to_type_dict(node_c);
 			if let Some(class) = node_conf.get("class") {
@@ -236,14 +236,14 @@ impl<'a, 'b:'a, 'c:'b> Network<'a, 'a>
 				log::error!("Missing classname for node.");
 			}
 		}
-		Ok(nodes)
+		nodes
 	}
 	pub fn get_hours_ranges(&self) -> ResultOpenHems<&HoursRanges> {
 		if let Some(power) = self.nodes.get_publicpowergrid() {
 			let hoursranges = power.get_contract().get_hoursranges();
 			Ok(hoursranges)
 		} else {
-			Err(OpenHemsError::new("No public power grid.".to_string()))
+			Err(OpenHemsError::new("Need a public power grid for hours ranges but there is not.".to_string()))
 		}
 	}
 }

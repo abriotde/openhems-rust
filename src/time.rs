@@ -1,14 +1,10 @@
-
-// use std::time::Duration;
-// use chrono::Local;
-use datetime::{LocalTime, LocalDateTime, LocalDate, Month};
+use datetime::{LocalTime, LocalDateTime};
 use core::fmt;
 use iso8601;
 use regex::Regex;
 use lazy_static::lazy_static;
 use yaml_rust2::Yaml;
 use crate::error::{OpenHemsError, ResultOpenHems};
-use chrono::Local;
 
 lazy_static!{
 	pub static ref REGEX_HOUR_MIN_SEC: Regex = Regex::new(r"^([0-9]+):|h([0-9]+):|m([0-9]+)$").unwrap();
