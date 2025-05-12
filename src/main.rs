@@ -48,12 +48,12 @@ fn main() {
 			let nodes = network.get_nodes(&configurator);
 			let mut network2 = network.clone();
 			network2.set_nodes(nodes);
-			println!("{}", network);
-			match Server::new(&network, &configurator) {
+			log::info!("Network : {}", network2);
+			match Server::new(& mut network2, &configurator) {
 				Ok(mut hems_server) => {
 					network2.set_server(Rc::new(&hems_server));
-					let now = LocalDateTime::now();
-					hems_server.loop1(now);
+					let now: LocalDateTime = LocalDateTime::now();
+					// hems_server.loop1(now);
 				}
 				Err(err) => {
 					log::error!("Fail load Network : {}", err.message)

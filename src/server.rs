@@ -26,7 +26,7 @@ impl<'a> Debug for Server<'a, 'a> {
 	}
 }
 impl<'a, 'b:'a, 'c:'b, 'd:'c> Server<'a, 'a> {
-	pub fn new(network:&'a Network<'a>, configurator: &ConfigurationManager) -> ResultOpenHems<Server<'a, 'a>> {
+	pub fn new(network:&'c Network<'b>, configurator: &ConfigurationManager) -> ResultOpenHems<Server<'a, 'a>> {
 		let mut strategies= Vec::new();
 		let loopdelay = configurator.get_as_int("server.loopdelay") as u32;
 		let allowsleep = true;

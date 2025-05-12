@@ -30,44 +30,13 @@ struct NodesHeapIterator<'a, 'b> {
 /* impl<'a> fmt::Debug for NodesHeap<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
 	{
-		let mut iter= self.get_all();
-		while let Some(node) = iter.next() {
+		for node in self.get_all() {
 			let _ = write!(f, ", {}", node);
 		}
 		Ok(())
     }
 } */
 
-/* impl<'a> NodesHeapIterator<'a, 'a> {
-    fn next(&'a mut self) -> Option<Box<&'a dyn Node>> {
-		match self.nodetype {
-			node::NodeType::PublicPowerGrid => {
-				if let Some(power) = self.heap.publicpowergrid.as_ref() {
-					self.index = 0;
-					self.nodetype = node::NodeType::Switch;
-					Some(Box::new(power))
-				} else {
-					self.index = 0;
-					self.nodetype = node::NodeType::Switch;
-					self.next()
-				}
-			}
-			node::NodeType::Switch => {
-				if self.index<self.heap.switch.len() {
-					self.index += 1;
-					Some(Box::new(&self.heap.switch[self.index-1]))
-				} else {
-					self.index = 0;
-					self.nodetype = node::NodeType::NodeBase;
-					self.next()
-				}
-			}
-			_ => {
-				None
-			}
-		}
-    }
-} */
 impl<'a, 'b:'a> Iterator for NodesHeapIterator<'a, 'b> {
     type Item = Box<&'a dyn Node>;
 	fn next(&mut self) -> Option<Self::Item> {
@@ -109,7 +78,7 @@ impl<'a, 'b:'a> NodesHeap<'a> {
 			// battery: Vec<node::Battery>,
 		}
 	}
-	pub fn get_all(&'b self) -> NodesHeapIterator<'a, 'a>
+	pub fn get_all<'g>(&'g self) -> NodesHeapIterator<'g, 'g>
 	{
 		NodesHeapIterator {
 			nodetype: node::NodeType::PublicPowerGrid,
@@ -119,20 +88,23 @@ impl<'a, 'b:'a> NodesHeap<'a> {
 		}
 	}
 	pub fn set_switch(&mut self, network:&'b Network<'a>, nameid:&str, updater:&'a HomeAssistantAPI, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<()> {
-		// println!("HA:get_switch({nameid})");
+		// println!("set_switch({nameid})");
 		let priority = updater.get_feeder_const_int(node_conf, "priority", 50);
 		let strategy_nameid = updater.get_feeder_const_str(node_conf, "strategy", "default");
 		let base = updater.get_nodebase(network, nameid, node_conf)?;
 		let switch = node::get_switch(base, priority as u32, &strategy_nameid)?;
 		self.switch.push(switch);
+		// println!("set_switch({nameid}) : Ok");
 		Ok(())
 	}
 	pub fn set_publicpowergrid(&mut self, network:&'b Network<'a>, nameid:&str, updater:&'a HomeAssistantAPI, node_conf:&HashMap<String, &Yaml>)  -> ResultOpenHems<()> {
+		// println!("set_publicpowergrid()");
 		let base = updater.get_nodebase(network, nameid, node_conf)?;
 		if let Some(contract_conf) = node_conf.get("contract") {
 			let contract = Contract::get_from_conf(contract_conf)?;
 			let node = node::get_publicpowergrid(base, contract)?;
 			self.publicpowergrid = Some(node);
+			// println!("set_publicpowergrid() : Ok");
 			Ok(())
 		} else {
 			Err(OpenHemsError::new(format!(
@@ -165,7 +137,7 @@ impl<'a, 'b:'a> Display for Network<'a> {
 
 impl<'a, 'b:'a, 'c:'b> Network<'a>
 {
-	pub fn set_server(&mut self, server:Rc<&'a Server<'a, 'a>>) {
+	pub fn set_server(&mut self, server:Rc<&'b Server<'a, 'a>>) {
 		self.server = Some(server);
 	}
 	pub fn set_nodes(&mut self, nodes:NodesHeap<'a>) {
@@ -236,6 +208,7 @@ impl<'a, 'b:'a, 'c:'b> Network<'a>
 				log::error!("Missing classname for node.");
 			}
 		}
+		// println!("Nodes:{nodes:?}");
 		nodes
 	}
 	pub fn get_hours_ranges(&self) -> ResultOpenHems<&HoursRanges> {
