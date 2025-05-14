@@ -5,7 +5,6 @@ use arrayvec::ArrayString;
 use crate::error::{OpenHemsError, ResultOpenHems};
 use crate::feeder::{Feeder, SourceFeeder};
 use crate::contract::Contract;
-use crate::network::Network;
 
 #[derive(Clone)]
 pub enum NodeType {
@@ -72,16 +71,15 @@ impl fmt::Debug for dyn Node {
 }
 
 #[derive(Clone)]
-pub struct NodeBase<'a, 'b:'a> {
+pub struct NodeBase {
 	nameid: ArrayString<16>,
 	max_power: f32,
 	min_power: f32,
-	current_power: SourceFeeder<'a, f32>,
+	current_power: SourceFeeder<f32>,
 	is_activate: bool,
-	is_on: Feeder<'a, bool>,
-	network: &'b Network<'a>
+	is_on: Feeder<bool>
 }
-impl<'a, 'b:'a, 'c:'b> Debug for NodeBase<'a, 'a> {
+impl<'a, 'b:'a, 'c:'b> Debug for NodeBase {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
 	{
 		write!(f, "id:{}, maxPower:{}, , minPower:{}, activ:{}, on:",
@@ -90,8 +88,8 @@ impl<'a, 'b:'a, 'c:'b> Debug for NodeBase<'a, 'a> {
     }
 }
 
-pub fn get_nodebase<'a>(network:&'a Network, nameid: &str, max_power: f32, min_power: f32, current_power:SourceFeeder<'a, f32>, is_on:Feeder<'a, bool>)
-		-> ResultOpenHems<NodeBase<'a, 'a>> {
+pub fn get_nodebase(nameid: &str, max_power: f32, min_power: f32, current_power:SourceFeeder<f32>, is_on:Feeder<bool>)
+		-> ResultOpenHems<NodeBase> {
 	if let Ok(name) = ArrayString::from(nameid) {
 		Ok(NodeBase {
 			nameid: name,
@@ -100,13 +98,12 @@ pub fn get_nodebase<'a>(network:&'a Network, nameid: &str, max_power: f32, min_p
 			current_power: current_power,
 			is_activate: true,
 			is_on: is_on,
-			network: network
 		})
 	} else {
 		Err(OpenHemsError::new(format!("'id' is to long (Limit is 16) for node {nameid}.")))
 	}
 }
-impl<'a, 'b:'a, 'c:'b> Node for NodeBase<'a, 'a> {
+impl<'a, 'b:'a, 'c:'b> Node for NodeBase {
     // Attributes
 	fn get_id(&self) -> &str {
 		&self.nameid
@@ -132,16 +129,16 @@ impl<'a, 'b:'a, 'c:'b> Node for NodeBase<'a, 'a> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Switch<'a> {
+pub struct Switch {
 	// Node
-	node: NodeBase<'a, 'a>,
+	node: NodeBase,
 	// Outnode
 	// Switch
 	pritority: u32,
 	strategy_nameid: ArrayString<16>,
 	schedule: u32
 }
-pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase<'a, 'a>, pritority: u32, strategy_nameid: &str) -> ResultOpenHems<Switch<'a>> {
+pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase, pritority: u32, strategy_nameid: &str) -> ResultOpenHems<Switch> {
 	if let Ok(strategy) = ArrayString::from(strategy_nameid) {
 		Ok(Switch {
 			node: node,
@@ -153,13 +150,13 @@ pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase<'a, 'a>, pritority: u32, stra
 		Err(OpenHemsError::new("Strategy is to long (Limit is 16)".to_string()))
 	}
 }
-impl<'a, 'b:'a, 'c:'b> Deref for Switch<'a> {
-    type Target = NodeBase<'a, 'a>;
-    fn deref(&self) -> &NodeBase<'a, 'a> {
+impl<'a, 'b:'a, 'c:'b> Deref for Switch {
+    type Target = NodeBase;
+    fn deref(&self) -> &NodeBase {
         &self.node
     }
 }
-impl<'a, 'b:'a, 'c:'b> Node for Switch<'a> {
+impl<'a, 'b:'a, 'c:'b> Node for Switch {
     // Attributes
 	fn get_id(&self) -> &str {
 		self.node.get_id()
@@ -185,31 +182,31 @@ impl<'a, 'b:'a, 'c:'b> Node for Switch<'a> {
 }
 
 #[derive(Clone, Debug)] // Clone, 
-pub struct PublicPowerGrid<'a> {
+pub struct PublicPowerGrid {
 	// Node
-	node: NodeBase<'a, 'a>,
+	node: NodeBase,
 	// Outnode
 	// PublicPowerGrid
 	contract: Contract
 }
-impl<'a, 'b:'a, 'c:'b> PublicPowerGrid<'a> {
+impl<'a, 'b:'a, 'c:'b> PublicPowerGrid {
 	pub fn get_contract(&self) -> &Contract {
 		&self.contract
 	}
 }
-pub fn get_publicpowergrid<'a, 'b:'a, 'c:'b>(node: NodeBase<'a, 'a>, contract: Contract) -> ResultOpenHems<PublicPowerGrid<'a>> {
+pub fn get_publicpowergrid<'a, 'b:'a, 'c:'b>(node: NodeBase, contract: Contract) -> ResultOpenHems<PublicPowerGrid> {
 	Ok(PublicPowerGrid {
 		node: node,
 		contract: contract
 	})
 }
-impl<'a, 'b:'a, 'c:'b> Deref for PublicPowerGrid<'a> {
-    type Target = NodeBase<'a, 'a>;
-    fn deref(&self) -> &NodeBase<'a, 'a> {
+impl<'a, 'b:'a, 'c:'b> Deref for PublicPowerGrid {
+    type Target = NodeBase;
+    fn deref(&self) -> &NodeBase {
         &self.node
     }
 }
-impl<'a, 'b:'a, 'c:'b> Node for PublicPowerGrid<'a> {
+impl<'a, 'b:'a, 'c:'b> Node for PublicPowerGrid {
     // Attributes
 	fn get_id(&self) -> &str {
 		self.node.get_id()

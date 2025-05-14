@@ -43,25 +43,15 @@ fn main() {
 	if let Err(err) = configurator.add_yaml_config(file_path, false) {
 		log::error!("Fail load configuration {file_path} : {err}");
 	}
-	match Network::new(&configurator) {
-		Ok(network) => {
-			let nodes = network.get_nodes(&configurator);
-			let mut network2 = network.clone();
-			network2.set_nodes(nodes);
-			log::info!("Network : {}", network2);
-			match Server::new(& mut network2, &configurator) {
-				Ok(mut hems_server) => {
-					network2.set_server(Rc::new(&hems_server));
-					let now: LocalDateTime = LocalDateTime::now();
-					// hems_server.loop1(now);
-				}
-				Err(err) => {
-					log::error!("Fail load Network : {}", err.message)
-				}
-			}
+	match Server::new(&configurator) {
+		Err(err) =>  {
+			log::error!("Fail configure server : {}", err.message);
 		}
-		Err(err) => {
-			log::error!("Fail load Network : {}", err.message)
+		Ok(mut hems_server) => {
+			hems_server.init(&configurator);
+			// log::info!("Server : {:?}", hems_server);
+			let now: LocalDateTime = LocalDateTime::now();
+			// hems_server.loop1(now);
 		}
 	}
 }

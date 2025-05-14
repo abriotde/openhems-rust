@@ -1,5 +1,5 @@
 use core::net;
-use std::{cmp::min, fmt::Debug};
+use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, sync::{Arc, Mutex}};
 use datetime::LocalDateTime;
 use yaml_rust2::Yaml;
 use crate::{
@@ -10,27 +10,43 @@ use crate::{
 	configuration_manager::ConfigurationManager
 };
 
-#[derive(Clone)]
-pub struct Server<'a, 'b:'a> {
-	network:&'b Network<'a>,
+// #[derive(Clone)]
+pub struct Server {
+	pub network: Rc<RefCell<Network>>,
 	loopdelay: u32,
-	strategies: Vec<OffPeakStrategy<'a, 'a>>,
+	strategies: Vec<OffPeakStrategy>,
 	cycleid: u32,
 	allowsleep: bool,
 	now: LocalDateTime,
-	inoverloadmode: bool
+	inoverloadmode: bool,
+	errors: Vec<String>
 }
-impl<'a> Debug for Server<'a, 'a> {
+impl<'a> Debug for Server {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-		write!(f, "Server(loopdelay:{}, cycleid:{})", self.loopdelay, self.cycleid)
+		write!(f, "Server(loopdelay:{}, cycleid:{}) On \n{:?}\n", self.loopdelay, self.cycleid, self.network)
 	}
 }
-impl<'a, 'b:'a, 'c:'b, 'd:'c> Server<'a, 'a> {
-	pub fn new(network:&'c Network<'b>, configurator: &ConfigurationManager) -> ResultOpenHems<Server<'a, 'a>> {
-		let mut strategies= Vec::new();
-		let loopdelay = configurator.get_as_int("server.loopdelay") as u32;
+impl<'a> Server {
+	pub fn new(configurator: &ConfigurationManager) -> ResultOpenHems<Server> {
 		let allowsleep = true;
 		let now: LocalDateTime = LocalDateTime::at(0);
+		let loopdelay = configurator.get_as_int("server.loopdelay") as u32;
+		let strategies = Vec::new();
+		let hems_server = Server{
+			network: Rc::new(RefCell::new(Network::new(configurator)?)),
+			loopdelay: loopdelay,
+			strategies: strategies,
+			cycleid: 0,
+			allowsleep: allowsleep,
+			now: now,
+			inoverloadmode: false,
+			errors: Vec::new()
+		};
+		Ok(hems_server)
+	}
+	pub fn init(&mut self, configurator: &ConfigurationManager) -> ResultOpenHems<()> {
+		let mut network = self.network.borrow_mut();
+		network.set_nodes(configurator);
 		if let Some(configuration) = configurator.get("server.strategies") {
 			if let Some(list) = configuration.clone().into_vec() {
 				let default = String::from("");
@@ -54,7 +70,7 @@ impl<'a, 'b:'a, 'c:'b, 'd:'c> Server<'a, 'a> {
 						}
 						match classname.to_lowercase().as_str() {
 							"offpeak" => {
-								strategies.push(OffPeakStrategy::new(network, &id, conf)?);
+								self.strategies.push(OffPeakStrategy::new(Rc::clone(&self.network), &id, conf)?);
 							}
 							_ => {
 								return Err(OpenHemsError::new(format!(
@@ -67,17 +83,7 @@ impl<'a, 'b:'a, 'c:'b, 'd:'c> Server<'a, 'a> {
 				}
 			}
 		}
-		let server = Server{
-			network: network,
-			loopdelay: loopdelay,
-			strategies: strategies,
-			cycleid: 0,
-			allowsleep: allowsleep,
-			now: now,
-			inoverloadmode: false
-		};
-		// network.set_server(&server);
-		Ok(server)
+		Ok(())
 	}
 	pub fn loop1(&mut self, now:LocalDateTime) {
 		self.now = now;

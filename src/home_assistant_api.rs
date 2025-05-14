@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::{RefCell, RefMut}, collections::HashMap, rc::Rc};
 use reqwest;
 use json::{self, JsonValue, object::Object};
 use yaml_rust2::Yaml;
@@ -30,44 +30,42 @@ pub trait HomeStateUpdater:Clone
 
 	// fn switch_on(&self) -> bool;
 	// fn get_feeder(&self, value:&str, expectedType:&str);
-	// fn get_publicpowergrid<'a>(&self, network:&'a Network, nameid:&str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<PublicPowerGrid>;
+	// fn get_publicpowergrid(&self, network:&'a Network, nameid:&str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<PublicPowerGrid>;
 	// fn get_solarpanel(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
 	// fn get_battery(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
-	// fn get_switch<'a>(&self, network:&'a Network, nameid:&str, node_conf:&HashMap<String, &Yaml>)  -> ResultOpenHems<Switch>;
+	// fn get_switch(&self, network:&'a Network, nameid:&str, node_conf:&HashMap<String, &Yaml>)  -> ResultOpenHems<Switch>;
     // fn get_network(&self) -> Network;
     fn get_cycle_id(&self) -> u32;
 }
 
 #[derive(Clone)]
-pub struct HomeAssistantAPI<'a, 'b:'a> {
+pub struct HomeAssistantAPI {
     token: String,
     url: String,
-    network: Option<&'b Network<'a>>,
     cached_ids: HashMap<String, JsonValue>,
 	ha_elements: HashMap<String, Object>,
 	cycle_id:u32
 }
-impl<'a, 'b:'a, 'c:'b> fmt::Display for HomeAssistantAPI<'a, 'b> {
+impl<'a, 'b:'a, 'c:'b> fmt::Display for HomeAssistantAPI {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Use `self.number` to refer to each positional data point.
         write!(f, "HomeAssistantAPI()")
     }
 }
-impl<'a, 'b:'a, 'c:'b> fmt::Debug for HomeAssistantAPI<'a, 'b> {
+impl<'a, 'b:'a, 'c:'b> fmt::Debug for HomeAssistantAPI {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Use `self.number` to refer to each positional data point.
         write!(f, "HomeAssistantAPI()")
     }
 }
 
-impl<'a, 'b:'a, 'c:'b> HomeAssistantAPI<'a, 'b> {
-    pub fn new(configurator:&ConfigurationManager) -> ResultOpenHems<HomeAssistantAPI<'a, 'b>> {
-		let url = configurator.get_as_str("api.url");
+impl<'a> HomeAssistantAPI {
+    pub fn new(configurator:&ConfigurationManager) -> ResultOpenHems<HomeAssistantAPI> {
+		let url: String = configurator.get_as_str("api.url");
 		let token = configurator.get_as_str("api.long_lived_token");
 		let mut updater = HomeAssistantAPI {
 			token: token,
 			url: url,
-			network: None,
 			cached_ids: HashMap::new(),
 			ha_elements: HashMap::new(),
 			cycle_id: 0
@@ -111,33 +109,33 @@ impl<'a, 'b:'a, 'c:'b> HomeAssistantAPI<'a, 'b> {
 				format!("Call Home-Assistant API for {url} : Fail parse '{body}' : {}", message.to_string())
 			))
 	}
-	pub fn get_feeder_const_int(&self, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:i32) -> i32 {
+	pub fn get_feeder_const_int(node_conf:&HashMap<String, &Yaml>, key:&str, default_value:i32) -> i32 {
 		if let Some(val) = node_conf.get(key) {
 			cast_utility::to_type_int(val)
 		} else {
 			default_value
 		}
 	}
-	pub fn get_feeder_const_str(&self, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:&str) -> String {
+	pub fn get_feeder_const_str(node_conf:&HashMap<String, &Yaml>, key:&str, default_value:&str) -> String {
 		if let Some(val) = node_conf.get(key) {
 			cast_utility::to_type_str(val)
 		} else {
 			default_value.to_string()
 		}
 	}
-	pub fn get_feeder_const_float(&self, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:f32) -> f32 {
+	pub fn get_feeder_const_float(node_conf:&HashMap<String, &Yaml>, key:&str, default_value:f32) -> f32 {
 		if let Some(val) = node_conf.get(key) {
 			cast_utility::to_type_float(val)
 		} else {
 			default_value
 		}
 	}
-	pub fn get_feeder_float(&'a self, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:f32) -> ResultOpenHems<SourceFeeder<'a, f32>> {
+	pub fn get_feeder_float(updater:Rc<RefCell<HomeAssistantAPI>>, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:f32) -> ResultOpenHems<SourceFeeder<f32>> {
 		if let Some(val) = node_conf.get(key) {
 			if let Yaml::String(entity_id) = val {
-				if self.ha_elements.contains_key(entity_id) {
-					// <HomeAssistantAPI, f32>
-					SourceFeeder::new(self, entity_id)
+				let updater2 = updater.borrow_mut();
+				if updater2.ha_elements.contains_key(entity_id) {
+					SourceFeeder::new(Rc::clone(&updater), entity_id)
 				} else {
 					Err(OpenHemsError::new(format!("No  key '{key}'")))
 				}
@@ -148,12 +146,13 @@ impl<'a, 'b:'a, 'c:'b> HomeAssistantAPI<'a, 'b> {
 			Err(OpenHemsError::new(format!("No  key '{key}'")))
 		}
 	}
-	pub fn get_feeder_bool(&'a self, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:bool) -> ResultOpenHems<SourceFeeder<'a, bool>> {
+	pub fn get_feeder_bool(updater:Rc<RefCell<HomeAssistantAPI>>, node_conf:&HashMap<String, &Yaml>, key:&str, default_value:bool) -> ResultOpenHems<SourceFeeder<bool>> {
 		if let Some(val) = node_conf.get(key) {
 			if let Yaml::String(entity_id) = val {
-				if self.ha_elements.contains_key(entity_id) {
+				let updater2 = updater.borrow_mut();
+				if updater2.ha_elements.contains_key(entity_id) {
 					// <HomeAssistantAPI, f32>
-					SourceFeeder::new(self, entity_id)
+					SourceFeeder::new(Rc::clone(&updater), entity_id)
 				} else {
 					Err(OpenHemsError::new(format!("No  key '{key}'")))
 				}
@@ -164,17 +163,17 @@ impl<'a, 'b:'a, 'c:'b> HomeAssistantAPI<'a, 'b> {
 			Err(OpenHemsError::new(format!("No  key '{key}'")))
 		}
 	}
-	pub fn get_nodebase(&'a self, network:&'a Network, nameid:&str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<NodeBase<'a, 'a>> {
-		let max_power = self.get_feeder_const_float(node_conf, "maxPower", 0.0);
-		let min_power = self.get_feeder_const_float(node_conf, "minPower", 0.0);
-		let current_power: SourceFeeder<'a, f32> = self.get_feeder_float(node_conf, "currentPower", 0.0)?;
+	pub fn get_nodebase(updater:Rc<RefCell<HomeAssistantAPI>>, nameid:&str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<NodeBase> {
+		let max_power = HomeAssistantAPI::get_feeder_const_float(node_conf, "maxPower", 0.0);
+		let min_power = HomeAssistantAPI::get_feeder_const_float(node_conf, "minPower", 0.0);
+		let current_power = HomeAssistantAPI::get_feeder_float(Rc::clone(&updater), node_conf, "currentPower", 0.0)?;
 		let is_on:Feeder<bool>;
-		if let Ok(source_feeder) = self.get_feeder_bool(node_conf, "isOn", false) {
+		if let Ok(source_feeder) = HomeAssistantAPI::get_feeder_bool(Rc::clone(&updater), node_conf, "isOn", false) {
 			is_on = Feeder::Source(source_feeder);
 		} else {
 			is_on = Feeder::Const(ConstFeeder::new(true));
 		}
-		let node = node::get_nodebase(network, nameid, max_power, min_power, current_power, is_on)?;
+		let node = node::get_nodebase(nameid, max_power, min_power, current_power, is_on)?;
 		Ok(node)
 	}
 	pub fn get_entity_value(&self, entity_id:&str) -> ResultOpenHems<&JsonValue> {
@@ -201,12 +200,11 @@ impl<'a, 'b:'a, 'c:'b> HomeAssistantAPI<'a, 'b> {
 }
 
 
-impl<'a, 'b:'a, 'c:'b> HomeStateUpdater for HomeAssistantAPI<'a, 'b> {
+impl<'a, 'b:'a, 'c:'b> HomeStateUpdater for HomeAssistantAPI {
     fn default() -> Self {
 		HomeAssistantAPI {
 			token: "".to_string(),
 			url: "".to_string(),
-			network: None,
 			cached_ids: HashMap::new(),
 			ha_elements: HashMap::new(),
 			cycle_id: 0
