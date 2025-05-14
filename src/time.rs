@@ -53,9 +53,9 @@ fn from_openhems_str(input: &str) -> ResultOpenHems<LocalTime> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct HoursRange {
-	start: LocalTime,
-	end: LocalTime,
-	cost: f32
+	pub start: LocalTime,
+	pub end: LocalTime,
+	pub cost: f32
 }
 impl HoursRange {
 	pub fn from(config:&Yaml, default_cost:f32) -> ResultOpenHems<HoursRange> {
@@ -126,7 +126,16 @@ impl HoursRange {
 			Ok(false)
 		}
 	}
-
+	pub fn get_end(&self, now:LocalDateTime) -> LocalDateTime {
+		let start = now.time();
+		let nbseconds = HoursRanges::get_timetowait(&start, &self.end);
+		now.add_seconds(nbseconds)
+	}
+	pub fn get_start(&self, now:LocalDateTime) -> LocalDateTime {
+		let end = now.time();
+		let nbseconds = HoursRanges::get_timetowait(&self.start, &end);
+		now.add_seconds(-nbseconds)
+	}
 }
 
 pub trait HoursRangesCallback {
@@ -325,7 +334,7 @@ impl HoursRanges {
 
 #[cfg(test)]
 mod tests {
-	use datetime::DatePiece;
+	use datetime::{DatePiece, LocalDate, Month};
 use yaml_rust2::YamlLoader;
     use super::*;
 

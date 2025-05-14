@@ -1,5 +1,5 @@
 use core::net;
-use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, sync::{Arc, Mutex}};
+use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, sync::{Arc, Mutex}, thread::sleep, time::Duration};
 use datetime::LocalDateTime;
 use yaml_rust2::Yaml;
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
 // #[derive(Clone)]
 pub struct Server {
 	pub network: Rc<RefCell<Network>>,
-	loopdelay: u32,
+	loopdelay: i64,
 	strategies: Vec<OffPeakStrategy>,
 	cycleid: u32,
 	allowsleep: bool,
@@ -30,7 +30,8 @@ impl<'a> Server {
 	pub fn new(configurator: &ConfigurationManager) -> ResultOpenHems<Server> {
 		let allowsleep = true;
 		let now: LocalDateTime = LocalDateTime::at(0);
-		let loopdelay = configurator.get_as_int("server.loopdelay") as u32;
+		let loopdelay = configurator.get_as_int("server.loopDelay") as i64;
+		assert!(loopdelay>=0);
 		let strategies = Vec::new();
 		let hems_server = Server{
 			network: Rc::new(RefCell::new(Network::new(configurator)?)),
@@ -92,8 +93,8 @@ impl<'a> Server {
 			log::error!("Fail update network");
 		} */
 		let mut sleep_duration = self.loopdelay;
-		for strategy in self.strategies.iter() {
-			match strategy.update_network() {
+		for strategy in self.strategies.iter_mut() {
+			match strategy.update_network(now) {
 				Ok(time2sleep) => {
 					sleep_duration = min(sleep_duration, time2sleep);
 				}
@@ -103,8 +104,22 @@ impl<'a> Server {
 			}
 		}
 	}
-	pub fn run(&self, loopdelay:u32) {
-		todo!()
+	pub fn run(&mut self) {
+		log::info!("Run OpenHEMS core server with loop-delay={}", self.loopdelay);
+		loop {
+			let now = LocalDateTime::now();
+			let nextloop = now.add_seconds(self.loopdelay);
+			self.loop1(now);
+			let t = LocalDateTime::now();
+			if t<nextloop {
+				let secs = (nextloop.to_instant().seconds() - t.to_instant().seconds())  as u64;
+				log::info!("Sleep for {} seconds.", secs);
+				sleep(Duration::from_secs(secs));
+			} else if t>nextloop {
+				let secs = (t.to_instant().seconds() - nextloop.to_instant().seconds())  as u64;
+				log::warn!("Missing {secs} seconds for the loop.");
+			}
+		}
 	}
 
 }

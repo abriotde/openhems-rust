@@ -49,9 +49,8 @@ fn main() {
 		}
 		Ok(mut hems_server) => {
 			hems_server.init(&configurator);
-			// log::info!("Server : {:?}", hems_server);
-			let now: LocalDateTime = LocalDateTime::now();
-			// hems_server.loop1(now);
+			log::info!("Server : {:?}", hems_server);
+			hems_server.run();
 		}
 	}
 }

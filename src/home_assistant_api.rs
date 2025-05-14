@@ -9,7 +9,7 @@ use crate::{
 	cast_utility, configuration_manager::ConfigurationManager,
 	error::{OpenHemsError, ResultOpenHems},
 	feeder::{ConstFeeder, Feeder, SourceFeeder},
-	network::Network, node::{self, NodeBase}
+	network::Network, node::{self, Node, NodeBase, Switch}
 };
 
 pub trait HomeStateUpdater:Clone
@@ -86,6 +86,7 @@ impl<'a> HomeAssistantAPI {
 		if let Some(mydata) = data {
 			// let mut body = reqwest::blocking::Body::new(mydata);
 			let request_body_string = serde_json::to_string(&mydata).unwrap();
+			log::info!("   with data = {}", request_body_string);
 			request_builder = client.post(&complete_url)
 				.body(request_body_string);
 		} else {
@@ -196,6 +197,21 @@ impl<'a> HomeAssistantAPI {
 		self.url = url;
 		self.token = token;
 		self.init_network()
+	}
+	pub fn switch(&self, switch:&Switch, on:bool) -> ResultOpenHems<()> {
+		if let Feeder::Source(feeder) = &switch.is_on {
+			let data = json!({
+				"entity_id": feeder.get_nameid().as_str()
+			});
+			let expect = if on {"on"} else {"off"};
+			let url = format!("/services/switch/turn_{}", expect);
+			if let JsonValue::Array(response) = self.call_api(&url, Some(data))? {
+				if let Some(states) = response.get(0) {
+					println!("States : {:?}", states);
+				}
+			}
+		}
+		Ok(())
 	}
 }
 

@@ -1,6 +1,7 @@
 use core::net;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::rc::Rc;
 use reqwest::Version;
 use yaml_rust2::Yaml;
@@ -114,10 +115,10 @@ impl<'a, 'b:'a> NodesHeap {
 			)))
 		}
 	}
-	fn get_publicpowergrid(&self) -> & Option<node::PublicPowerGrid> {
+	pub fn get_publicpowergrid(&self) -> & Option<node::PublicPowerGrid> {
 		& self.publicpowergrid
 	}
-	fn get_all_switch(&self, _pattern:&str) -> &Vec<node::Switch> {
+	pub fn get_all_switch(&self, _pattern:&str) -> &Vec<node::Switch> {
 		& self.switch
 	}
 }
@@ -136,8 +137,15 @@ impl<'a, 'b:'a> Display for Network {
         write!(f, "Network<{:?}> (\n{:?}\n)", self.updater, self.nodes)
     }
 }
+impl Deref for Network 
+{
+	type Target = NodesHeap;
+	fn deref(&self) -> &<Self as Deref>::Target {
+		&self.nodes
+	}
+}
 
-impl<'a> Network
+impl Network
 {
 	pub fn new(configurator:&ConfigurationManager) -> ResultOpenHems<Network> {
 		let margin_power_on = 0.0;
@@ -167,10 +175,9 @@ impl<'a> Network
 		};
 		Ok(network)
 	}
-	pub fn set_nodes(&mut self, configurator:&ConfigurationManager) -> Vec<String> {
+	pub fn set_nodes(&mut self, configurator:&ConfigurationManager) -> () {
 		let nodes_conf = configurator.get_as_list("network.nodes");
 		let count = 0;
-		let mut errors = Vec::new();
 		for node_c in nodes_conf {
 			let node_conf: HashMap<String, &Yaml> = cast_utility::to_type_dict(node_c);
 			if let Some(class) = node_conf.get("class") {
@@ -207,7 +214,6 @@ impl<'a> Network
 			}
 		}
 		println!("Nodes:{:?}", self.nodes);
-		errors
 	}
 	pub fn get_hours_ranges(&self) -> ResultOpenHems<&HoursRanges> {
 		if let Some(power) = self.nodes.get_publicpowergrid() {
@@ -216,5 +222,9 @@ impl<'a> Network
 		} else {
 			Err(OpenHemsError::new("Need a public power grid for hours ranges but there is not.".to_string()))
 		}
+	}
+	pub fn switch(&self, switch:&Switch, on:bool) -> ResultOpenHems<()> {
+		let v = self.updater.borrow_mut();
+		v.switch(switch, on)
 	}
 }

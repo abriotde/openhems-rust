@@ -79,6 +79,9 @@ impl<'a, 'b:'a, T:FeederOutType<T>+Clone> SourceFeeder<T> {
 			value: T::default()
 		})
 	}
+	pub fn get_nameid(&self) -> &ArrayString<64> {
+		&self.nameid
+	}
 }
 /* impl<'a, T:FeederOutType<T>+Clone> SourceFeeder<T> {
 	pub fn get_value(&mut self) -> ResultOpenHems<T> {

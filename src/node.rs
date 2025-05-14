@@ -77,7 +77,7 @@ pub struct NodeBase {
 	min_power: f32,
 	current_power: SourceFeeder<f32>,
 	is_activate: bool,
-	is_on: Feeder<bool>
+	pub is_on: Feeder<bool>
 }
 impl<'a, 'b:'a, 'c:'b> Debug for NodeBase {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
@@ -149,6 +149,8 @@ pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase, pritority: u32, strategy_nam
 	} else {
 		Err(OpenHemsError::new("Strategy is to long (Limit is 16)".to_string()))
 	}
+}
+impl Switch {
 }
 impl<'a, 'b:'a, 'c:'b> Deref for Switch {
     type Target = NodeBase;

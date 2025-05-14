@@ -73,6 +73,7 @@ impl ConfigurationManager {
 		if let Some(value) = self.conf.get(key) {
 			cast_utility::to_type_int(value)
 		} else {
+			log::error!("No key:'{key}'");
 			0
 		}
 	}
