@@ -129,6 +129,7 @@ impl HoursRange {
 	pub fn get_end(&self, now:LocalDateTime) -> LocalDateTime {
 		let start = now.time();
 		let nbseconds = HoursRanges::get_timetowait(&start, &self.end);
+		// println!("get_end() : Add {nbseconds} seconds. {start:?} - {:?}", self.end);
 		now.add_seconds(nbseconds)
 	}
 	pub fn get_start(&self, now:LocalDateTime) -> LocalDateTime {
@@ -294,8 +295,9 @@ impl HoursRanges {
 		let to_s = to.to_seconds();
 		let mut dt = to_s-from_s;
 		if dt<0 {
-			dt += 24*3600+dt;
+			dt += 24*3600;
 		}
+		// println!("get_timetowait({:?} - {:?}) : {to_s}-{from_s} = {dt}", from , to);
 		dt
 		// print("getTimeToWait(",self.time,", ",nextTime,") = ",wait)
 	}

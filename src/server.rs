@@ -1,5 +1,4 @@
-use core::net;
-use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, sync::{Arc, Mutex}, thread::sleep, time::Duration};
+use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, thread::sleep, time::Duration};
 use datetime::LocalDateTime;
 use yaml_rust2::Yaml;
 use crate::{
@@ -16,10 +15,10 @@ pub struct Server {
 	loopdelay: i64,
 	strategies: Vec<OffPeakStrategy>,
 	cycleid: u32,
-	allowsleep: bool,
+	_allowsleep: bool,
 	now: LocalDateTime,
-	inoverloadmode: bool,
-	errors: Vec<String>
+	_inoverloadmode: bool,
+	_errors: Vec<String>
 }
 impl<'a> Debug for Server {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -38,10 +37,10 @@ impl<'a> Server {
 			loopdelay: loopdelay,
 			strategies: strategies,
 			cycleid: 0,
-			allowsleep: allowsleep,
+			_allowsleep: allowsleep,
 			now: now,
-			inoverloadmode: false,
-			errors: Vec::new()
+			_inoverloadmode: false,
+			_errors: Vec::new()
 		};
 		Ok(hems_server)
 	}
@@ -61,7 +60,7 @@ impl<'a> Server {
 								"Missing key 'id' for strategy."
 							)));
 						}
-						let mut id = &default;
+						let mut id: &String = &default;
 						if let Some(Yaml::String(v)) = get_yaml_key("id", conf) {
 							id = v;
 						} else {
@@ -87,12 +86,16 @@ impl<'a> Server {
 		Ok(())
 	}
 	pub fn loop1(&mut self, now:LocalDateTime) {
+		log::info!("Now: {:?}", now);
 		self.now = now;
-		
-		/* if let Err(err) = self.network.update() {
-			log::error!("Fail update network");
-		} */
 		let mut sleep_duration = self.loopdelay;
+		{
+			let mut network = self.network.borrow_mut();
+			if let Err(err) = network.update() {
+				log::error!("Fail update network : {}", err.message);
+				return;
+			}
+		}
 		for strategy in self.strategies.iter_mut() {
 			match strategy.update_network(now) {
 				Ok(time2sleep) => {

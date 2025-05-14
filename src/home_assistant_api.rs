@@ -33,7 +33,6 @@ pub trait HomeStateUpdater:Clone
 	// fn get_publicpowergrid(&self, network:&'a Network, nameid:&str, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<PublicPowerGrid>;
 	// fn get_solarpanel(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
 	// fn get_battery(&self,nameid:&str, nodeConf:HashMap<String, Yaml>);
-	// fn get_switch(&self, network:&'a Network, nameid:&str, node_conf:&HashMap<String, &Yaml>)  -> ResultOpenHems<Switch>;
     // fn get_network(&self) -> Network;
     fn get_cycle_id(&self) -> u32;
 }
@@ -43,7 +42,7 @@ pub struct HomeAssistantAPI {
     token: String,
     url: String,
     cached_ids: HashMap<String, JsonValue>,
-	ha_elements: HashMap<String, Object>,
+	ha_elements: HashMap<String, JsonValue>,
 	cycle_id:u32
 }
 impl<'a, 'b:'a, 'c:'b> fmt::Display for HomeAssistantAPI {
@@ -136,6 +135,7 @@ impl<'a> HomeAssistantAPI {
 			if let Yaml::String(entity_id) = val {
 				let updater2 = updater.borrow_mut();
 				if updater2.ha_elements.contains_key(entity_id) {
+					drop(updater2);
 					SourceFeeder::new(Rc::clone(&updater), entity_id)
 				} else {
 					Err(OpenHemsError::new(format!("No  key '{key}'")))
@@ -152,6 +152,7 @@ impl<'a> HomeAssistantAPI {
 			if let Yaml::String(entity_id) = val {
 				let updater2 = updater.borrow_mut();
 				if updater2.ha_elements.contains_key(entity_id) {
+					drop(updater2);
 					// <HomeAssistantAPI, f32>
 					SourceFeeder::new(Rc::clone(&updater), entity_id)
 				} else {
@@ -198,23 +199,35 @@ impl<'a> HomeAssistantAPI {
 		self.token = token;
 		self.init_network()
 	}
-	pub fn switch(&self, switch:&Switch, on:bool) -> ResultOpenHems<()> {
-		if let Feeder::Source(feeder) = &switch.is_on {
-			let data = json!({
-				"entity_id": feeder.get_nameid().as_str()
-			});
-			let expect = if on {"on"} else {"off"};
-			let url = format!("/services/switch/turn_{}", expect);
-			if let JsonValue::Array(response) = self.call_api(&url, Some(data))? {
-				if let Some(states) = response.get(0) {
-					println!("States : {:?}", states);
-				}
+	pub fn switch(&self, entity_id:&str, on:bool) -> ResultOpenHems<()> {
+		let data = json!({
+			"entity_id": entity_id
+		});
+		let expect = if on {"on"} else {"off"};
+		let url = format!("/services/switch/turn_{}", expect);
+		if let JsonValue::Array(response) = self.call_api(&url, Some(data))? {
+			if let Some(states) = response.get(0) {
+				println!("States : {:?}", states);
 			}
 		}
 		Ok(())
 	}
 }
 
+macro_rules! get_entity_value_ (
+    ($fname:ident, $t:ident, $f:ident) => (
+#[must_use]
+fn $fname(&self, entity_id:&str) -> ResultOpenHems<$t> {
+	let v= self.get_entity_value(entity_id)?;
+	if let Some(value)  = v.$f() {
+		Ok(value)
+	} else {
+		let message = format!("Value can not be parsed as $name.");
+		Err(OpenHemsError::new(message))
+	}
+}
+    );
+);
 
 impl<'a, 'b:'a, 'c:'b> HomeStateUpdater for HomeAssistantAPI {
     fn default() -> Self {
@@ -234,7 +247,10 @@ impl<'a, 'b:'a, 'c:'b> HomeStateUpdater for HomeAssistantAPI {
 				if let JsonValue::Object(entity) = elem {
 					let entity_id = entity.get("entity_id").unwrap().as_str().unwrap();
 					// println!(" - {entity_id}");
-					self.ha_elements.insert(String::from(entity_id), entity);
+					if let Some(state) = entity.get("state") {
+						// println!("HomeAssistantAPI::init_network() : '{entity_id}' := {state:?}")
+						self.ha_elements.insert(String::from(entity_id), state.clone());
+					}
 					count = count + 1;
 				}
 			}
@@ -244,6 +260,29 @@ impl<'a, 'b:'a, 'c:'b> HomeStateUpdater for HomeAssistantAPI {
 	}
 	fn update_network(&mut self) -> ResultOpenHems<bool> {
 		self.cycle_id += 1;
+		if self.cached_ids.len()==0 {
+			log::warn!("HomeAssistantAPI.update_network() : No entities to update.")
+		}
+		let states = self.call_api("/states", None)?;
+		let mut count = 0;
+		if let JsonValue::Array(parsed_list) = states {
+			for elem in parsed_list {
+				if let JsonValue::Object(entity) = elem {
+					let entity_id = entity.get("entity_id").unwrap().as_str().unwrap();
+					// println!(" - {entity_id}");
+					if self.cached_ids.contains_key(entity_id) {
+						if let Some(state) = entity.get("state") {
+							log::debug!("HomeAssistantAPI::update_network() : '{entity_id}' := {state:?}");
+							self.cached_ids.insert(String::from(entity_id), state.clone());
+						} else {
+							log::warn!("No state for  : '{entity_id}' := {entity:?}");
+						}
+					}
+					count = count + 1;
+				}
+			}
+		}
+		log::debug!("update_network() : {} keys.", count);
 		Ok(true)
 	}
 	fn notify(&self, message: &str) -> ResultOpenHems<bool> {
@@ -260,45 +299,37 @@ impl<'a, 'b:'a, 'c:'b> HomeStateUpdater for HomeAssistantAPI {
 		self.cycle_id
 	}
 	fn register_entity(&mut self, nameid:&str) -> bool {
+		println!("register_entity({})", nameid);
 		if !self.cached_ids.contains_key(nameid) {
 			self.cached_ids.insert(nameid.to_string(), JsonValue::Null);
 		}
 		true
 	}
-	fn get_entity_value_int(&self, entity_id:&str) -> ResultOpenHems<i32> {
-		let v= self.get_entity_value(entity_id)?;
-		if let Some(value)  = v.as_i32() {
-			Ok(value)
-		} else {
-			let message = format!("Value can not be parsed as Integer.");
-			Err(OpenHemsError::new(message))
-		}
-	}
-	fn get_entity_value_float(&self, entity_id:&str) -> ResultOpenHems<f32> {
-		let v= self.get_entity_value(entity_id)?;
-		if let Some(value)  = v.as_f32() {
-			Ok(value)
-		} else {
-			let message = format!("Value can not be parsed as Real.");
-			Err(OpenHemsError::new(message))
-		}
-	}
+    get_entity_value_!(get_entity_value_int, i32, as_i32);
+    get_entity_value_!(get_entity_value_float, f32, as_f32);
 	fn get_entity_value_str(&self, entity_id:&str) -> ResultOpenHems<String> {
 		let v= self.get_entity_value(entity_id)?;
 		if let Some(value)  = v.as_str() {
 			Ok(value.to_string())
 		} else {
-			let message = format!("Value can not be parsed as string");
+			let message = format!("Value can not be parsed as string : {:?}", v);
 			Err(OpenHemsError::new(message))
 		}
 	}
 	fn get_entity_value_bool(&self, entity_id:&str) -> ResultOpenHems<bool> {
 		let v= self.get_entity_value(entity_id)?;
-		if let Some(value)  = v.as_bool() {
-			Ok(value)
-		} else {
-			let message = format!("Value can not be parsed as string");
-			Err(OpenHemsError::new(message))
+		match v {
+			JsonValue::Boolean(value) => {
+				Ok(*value)
+			}
+			JsonValue::Short(value) => {
+				let v2 = value.as_str();
+				Ok(v2!="0")
+			}
+			_ => {
+				let message = format!("Value can not be parsed as bool : {:?} ", v);
+				Err(OpenHemsError::new(message))
+			}
 		}
 	}
 }

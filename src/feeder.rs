@@ -72,6 +72,10 @@ impl<'a, 'b:'a, T:FeederOutType<T>+Clone> SourceFeeder<T> {
 			.map_err(|message| OpenHemsError::new(
 				format!("Entity id '{entity_id}' is too long : {}", message.to_string())
 			))?;
+		{
+			let mut updater2 = updater.borrow_mut();
+			updater2.register_entity(entity_id);
+		}
 		Ok(SourceFeeder {
 			nameid: nameid,
 			source: updater,
@@ -82,47 +86,50 @@ impl<'a, 'b:'a, T:FeederOutType<T>+Clone> SourceFeeder<T> {
 	pub fn get_nameid(&self) -> &ArrayString<64> {
 		&self.nameid
 	}
+	pub fn switch(&self, nameid:&str, on:bool) -> ResultOpenHems<()>{
+		let updater = self.source.borrow();
+		updater.switch(nameid, on)
+	}
 }
 /* impl<'a, T:FeederOutType<T>+Clone> SourceFeeder<T> {
 	pub fn get_value(&mut self) -> ResultOpenHems<T> {
 		Ok(T::default())
 	}
 } */
-impl<'a> SourceFeeder<i32> {
-	pub fn get_value(&mut self) -> ResultOpenHems<i32> {
-		let source = self.source.borrow_mut();
-		if self.cycle_id <= source.get_cycle_id() {
-			self.value = source.get_entity_value_int(&self.nameid)?
-		}
-		Ok(self.value)
+macro_rules! get_value (
+    ($t:ident, $f:ident) => (
+#[must_use]
+pub fn get_value(&mut self) -> ResultOpenHems<$t> {
+	let source = self.source.borrow_mut();
+	let cur_id = source.get_cycle_id();
+	if self.cycle_id <= cur_id {
+		self.value = source.$f(&self.nameid)?;
+		self.cycle_id = cur_id;
 	}
+	Ok(self.value)
+}
+    );
+);
+
+impl<'a> SourceFeeder<i32> {
+	get_value!(i32, get_entity_value_int);
 }
 impl<'a> SourceFeeder<f32> {
-	pub fn get_value(&mut self) -> ResultOpenHems<f32> {
-		let source = self.source.borrow_mut();
-		if self.cycle_id <= source.get_cycle_id() {
-			self.value = source.get_entity_value_float(&self.nameid)?
-		}
-		Ok(self.value)
-	}
+	get_value!(f32, get_entity_value_float);
 }
 impl<'a> SourceFeeder<String> {
 	pub fn get_value(&mut self) -> ResultOpenHems<String> {
 		let source = self.source.borrow_mut();
-		if self.cycle_id <= source.get_cycle_id() {
-			self.value = source.get_entity_value_str(&self.nameid)?
+		let cur_id = source.get_cycle_id();
+		if self.cycle_id <= cur_id {
+			self.value = source.get_entity_value_str(&self.nameid)?;
+			self.cycle_id = cur_id;
 		}
 		Ok(self.value.clone())
 	}
 }
 impl<'a> SourceFeeder<bool> {
-	pub fn get_value(&mut self) -> ResultOpenHems<bool> {
-		let source = self.source.borrow_mut();
-		if self.cycle_id <= source.get_cycle_id() {
-			self.value = source.get_entity_value_bool(&self.nameid)?
-		}
-		Ok(self.value)
-	}
+	get_value!(bool, get_entity_value_bool);
 }
 
 #[derive(Clone, Debug, Copy)]

@@ -5,14 +5,14 @@ use crate::cast_utility;
 
 pub struct ConfigurationManager {
 	conf:HashMap<String, Box<Yaml>>,
-	cache:HashMap<String, String>,
+	_cache:HashMap<String, String>,
 	default_path:String
 }
 
 pub fn get(default_path:Option<String>) -> ConfigurationManager {
 	let mut conf = ConfigurationManager {
 		conf: HashMap::new(),
-		cache: HashMap::new(),
+		_cache: HashMap::new(),
 		default_path: String::from("")
 	};
 	if let Some(path) = default_path {

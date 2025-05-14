@@ -1,18 +1,15 @@
-use core::net;
-use std::cell::{RefCell, RefMut};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
-use reqwest::Version;
 use yaml_rust2::Yaml;
 use std::fmt::{self, Display};
 use crate::configuration_manager::ConfigurationManager;
 use crate::contract::Contract;
 use crate::error::{OpenHemsError, ResultOpenHems};
-use crate::node::{self, Node, PublicPowerGrid, Switch};
+use crate::node::{self, Node};
 use crate::home_assistant_api::{HomeStateUpdater,HomeAssistantAPI};
 use crate::cast_utility;
-use crate::server::Server;
 use crate::time::HoursRanges;
 
 // Rust equivalent of Python nodes list with multi nodes types.
@@ -24,10 +21,10 @@ pub struct NodesHeap {
 	// battery: Vec<node::Battery>,
 }
 #[derive(Clone, Debug)]
-struct NodesHeapIterator<'a> {
+pub struct NodesHeapIterator<'a> {
 	nodetype: node::NodeType,
 	index:usize,
-	filter: String,
+	_filter: String,
 	heap: &'a NodesHeap
 }
 /* impl fmt::Debug for NodesHeap {
@@ -81,12 +78,12 @@ impl<'a, 'b:'a> NodesHeap {
 			// battery: Vec<node::Battery>,
 		}
 	}
-	pub fn get_all(&'b self) -> NodesHeapIterator
+	pub fn get_all(&'b self) -> NodesHeapIterator<'b>
 	{
 		NodesHeapIterator {
 			nodetype: node::NodeType::PublicPowerGrid,
 			index: 0,
-			filter: "all".to_string(),
+			_filter: "all".to_string(),
 			heap: self,
 		}
 	}
@@ -127,8 +124,8 @@ impl<'a, 'b:'a> NodesHeap {
 pub struct Network {
     updater: Rc<RefCell<HomeAssistantAPI>>,
     nodes: NodesHeap,
-    margin_power_on: f32,
-	margin_power_on_cache_id: u32,
+    _margin_power_on: f32,
+	_margin_power_on_cache_id: u32,
 	errors: Vec<String>,
 }
 impl<'a, 'b:'a> Display for Network {
@@ -169,8 +166,8 @@ impl Network
 		let network = Network {
 			updater: Rc::new(RefCell::new(updater)),
 			nodes: NodesHeap::new(),
-			margin_power_on: margin_power_on,
-			margin_power_on_cache_id: margin_power_on_cache_id,
+			_margin_power_on: margin_power_on,
+			_margin_power_on_cache_id: margin_power_on_cache_id,
 			errors: Vec::new()
 		};
 		Ok(network)
@@ -191,14 +188,14 @@ impl Network
 				}
 				match &*classname.to_lowercase() {
 					"switch" => {
-						if let Err(err) = self.nodes.set_switch(nameid.as_str(), Rc::clone(&self.updater), &node_conf) {
+						if let Err(err) = self.nodes.set_switch(nameid.as_str(), self.updater.clone(), &node_conf) {
 							let message = format!("Impossible to add switch '{nameid}' due to {}.", err.message);
 							log::error!("ERROR {}",&message);
 							self.errors.push(message);
 						}
 					},
 					"publicpowergrid" => {
-						if let Err(err) = self.nodes.set_publicpowergrid(nameid.as_str(), Rc::clone(&self.updater), &node_conf) {
+						if let Err(err) = self.nodes.set_publicpowergrid(nameid.as_str(), self.updater.clone(), &node_conf) {
 							let message = format!("Impossible to add PublicPowerGrid '{nameid}' due to {}.", err.message);
 							log::error!("ERROR {}",&message);
 							self.errors.push(message);
@@ -223,8 +220,8 @@ impl Network
 			Err(OpenHemsError::new("Need a public power grid for hours ranges but there is not.".to_string()))
 		}
 	}
-	pub fn switch(&self, switch:&Switch, on:bool) -> ResultOpenHems<()> {
-		let v = self.updater.borrow_mut();
-		v.switch(switch, on)
+	pub fn update(&mut self) -> ResultOpenHems<bool> {
+		let mut updater = self.updater.borrow_mut();
+		updater.update_network()
 	}
 }

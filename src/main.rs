@@ -1,12 +1,8 @@
-use datetime::LocalDateTime;
-use error::{ResultOpenHems, OpenHemsError};
-use home_assistant_api::HomeAssistantAPI;
-use network::Network;
 use log;
 use chrono;
 use env_logger;
 use server::Server;
-use std::{io::Write, rc::Rc};
+use std::io::Write;
 
 mod utils;
 mod home_assistant_api;
@@ -48,7 +44,9 @@ fn main() {
 			log::error!("Fail configure server : {}", err.message);
 		}
 		Ok(mut hems_server) => {
-			hems_server.init(&configurator);
+			if let Err(err) = hems_server.init(&configurator) {
+				log::error!("Fail init server : {}", err.message);
+			}
 			log::info!("Server : {:?}", hems_server);
 			hems_server.run();
 		}

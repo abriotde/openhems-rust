@@ -48,6 +48,8 @@ impl fmt::Debug for NodeType {
         write!(f, "{}", s)
     }
 }
+impl NodeType {
+}
 pub trait Node {
 	fn get_type(&self) -> NodeType;
 	fn get_id(&self) -> &str;
@@ -134,23 +136,32 @@ pub struct Switch {
 	node: NodeBase,
 	// Outnode
 	// Switch
-	pritority: u32,
-	strategy_nameid: ArrayString<16>,
-	schedule: u32
+	_pritority: u32,
+	_strategy_nameid: ArrayString<16>,
+	_schedule: u32
 }
 pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase, pritority: u32, strategy_nameid: &str) -> ResultOpenHems<Switch> {
 	if let Ok(strategy) = ArrayString::from(strategy_nameid) {
 		Ok(Switch {
 			node: node,
-			pritority: pritority,
-			strategy_nameid: strategy,
-			schedule: 0
+			_pritority: pritority,
+			_strategy_nameid: strategy,
+			_schedule: 0
 		})
 	} else {
 		Err(OpenHemsError::new("Strategy is to long (Limit is 16)".to_string()))
 	}
 }
 impl Switch {
+	pub fn switch(&self, on:bool) -> ResultOpenHems<()> {
+		log::info!("{}.switch(on={on})", self.get_id());
+		if let Feeder::Source(mut feeder) = self.is_on.clone() {
+			if feeder.get_value()?!=on {
+				return feeder.switch(feeder.get_nameid().as_str(), on);
+			}
+		}
+		Ok(())
+	}
 }
 impl<'a, 'b:'a, 'c:'b> Deref for Switch {
     type Target = NodeBase;
