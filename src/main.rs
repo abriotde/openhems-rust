@@ -16,6 +16,7 @@ mod time;
 mod offpeak_strategy;
 mod contract;
 mod server;
+mod schedule;
 
 fn main() {
     env_logger::Builder::new()

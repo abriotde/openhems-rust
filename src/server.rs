@@ -1,5 +1,5 @@
 use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, thread::sleep, time::Duration};
-use datetime::LocalDateTime;
+use chrono::{DateTime, Local, MappedLocalTime, NaiveDate, NaiveDateTime};
 use yaml_rust2::Yaml;
 use crate::{
 	error::{OpenHemsError, ResultOpenHems},
@@ -12,11 +12,11 @@ use crate::{
 // #[derive(Clone)]
 pub struct Server {
 	pub network: Rc<RefCell<Network>>,
-	loopdelay: i64,
+	loopdelay: u64,
 	strategies: Vec<OffPeakStrategy>,
 	cycleid: u32,
 	_allowsleep: bool,
-	now: LocalDateTime,
+	now: DateTime<Local>,
 	_inoverloadmode: bool,
 	_errors: Vec<String>
 }
@@ -28,11 +28,14 @@ impl<'a> Debug for Server {
 impl<'a> Server {
 	pub fn new(configurator: &ConfigurationManager) -> ResultOpenHems<Server> {
 		let allowsleep = true;
-		let now: LocalDateTime = LocalDateTime::at(0);
-		let loopdelay = configurator.get_as_int("server.loopDelay") as i64;
+		let now = if let MappedLocalTime::Single(d) = NaiveDateTime::default().and_local_timezone(Local) {d}  else {
+			panic!("Fail init MIN_DATETIME");
+		};
+		NaiveDate::from_ymd_opt(1970, 1, 1);
+		let loopdelay = configurator.get_as_int("server.loopDelay") as u64;
 		assert!(loopdelay>=0);
 		let strategies = Vec::new();
-		let hems_server = Server{
+		let hems_server = Server {
 			network: Rc::new(RefCell::new(Network::new(configurator)?)),
 			loopdelay: loopdelay,
 			strategies: strategies,
@@ -85,7 +88,7 @@ impl<'a> Server {
 		}
 		Ok(())
 	}
-	pub fn loop1(&mut self, now:LocalDateTime) {
+	pub fn loop1(&mut self, now:DateTime<Local>) {
 		log::info!("Now: {:?}", now);
 		self.now = now;
 		let mut sleep_duration = self.loopdelay;
@@ -110,16 +113,16 @@ impl<'a> Server {
 	pub fn run(&mut self) {
 		log::info!("Run OpenHEMS core server with loop-delay={}", self.loopdelay);
 		loop {
-			let now = LocalDateTime::now();
-			let nextloop = now.add_seconds(self.loopdelay);
+			let now = Local::now();
+			let nextloop = now + Duration::from_secs(self.loopdelay);
 			self.loop1(now);
-			let t = LocalDateTime::now();
+			let t = Local::now();
 			if t<nextloop {
-				let secs = (nextloop.to_instant().seconds() - t.to_instant().seconds())  as u64;
-				log::info!("Sleep for {} seconds.", secs);
-				sleep(Duration::from_secs(secs));
+				let secs = nextloop - t;
+				log::info!("Sleep for {} seconds.", secs.num_seconds());
+				sleep(secs.to_std().unwrap());
 			} else if t>nextloop {
-				let secs = (t.to_instant().seconds() - nextloop.to_instant().seconds())  as u64;
+				let secs = (t - nextloop).as_seconds_f32();
 				log::warn!("Missing {secs} seconds for the loop.");
 			}
 		}

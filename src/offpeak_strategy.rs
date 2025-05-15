@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use datetime::LocalDateTime;
+use chrono::{DateTime, Local, MappedLocalTime, NaiveDate, NaiveDateTime};
 use hashlink::linked_hash_map::LinkedHashMap;
 use yaml_rust2::Yaml;
-use crate::error::ResultOpenHems;
+use crate::error::{OpenHemsError, ResultOpenHems};
 use crate::network::Network;
 use crate::node::Node;
 use crate::time::HoursRange;
@@ -11,7 +11,7 @@ use crate::time::HoursRange;
 pub trait EnergyStrategy {
 	fn get_strategy_id(&self) -> &str;
 	fn get_nodes(&self) -> &Vec<Box<dyn Node>>;
-	fn update_network(&mut self, now:LocalDateTime) -> ResultOpenHems<i64>;
+	fn update_network(&mut self, now:DateTime<Local>) -> ResultOpenHems<u64>;
 	fn new(network:Rc<RefCell<Network>>, id:&str, config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy>;
 }
 // #[derive(Clone)]
@@ -21,7 +21,7 @@ pub struct OffPeakStrategy {
 	rangechangedone: bool,
 	_nextranges: Vec<HoursRange>,
 	network: Rc<RefCell<Network>>,
-	rangeend: LocalDateTime
+	rangeend: DateTime<Local>
 }
 
 impl<'a, 'b:'a> EnergyStrategy for OffPeakStrategy {
@@ -31,7 +31,7 @@ impl<'a, 'b:'a> EnergyStrategy for OffPeakStrategy {
 	fn get_nodes(&self) -> &Vec<Box<dyn Node>> {
 		todo!();
 	}
-	fn update_network(&mut self, now:LocalDateTime) -> ResultOpenHems<i64> {
+	fn update_network(&mut self, now:DateTime<Local>) -> ResultOpenHems<u64> {
 		if now>self.rangeend {
 			let network = self.network.borrow_mut();
 			let hoursranges = network.get_hours_ranges()?;
@@ -54,11 +54,14 @@ impl<'a, 'b:'a> EnergyStrategy for OffPeakStrategy {
 		Ok(100000)
 	}
 	fn new(network:Rc<RefCell<Network>>, id:&str, _config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy> {
+		let rangeend = if let MappedLocalTime::Single(d) = NaiveDateTime::default().and_local_timezone(Local) {d}  else {
+			return Err(OpenHemsError::new(format!("")));
+		};
 		Ok(OffPeakStrategy {
 			id: id.to_string(),
 			inoffpeakrange: false,
 			rangechangedone: false,
-			rangeend: LocalDateTime::at(0),
+			rangeend: rangeend,
 			_nextranges: Vec::new(),
 			network: network
 		})

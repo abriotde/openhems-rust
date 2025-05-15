@@ -1,51 +1,59 @@
-use datetime::{LocalTime, LocalDateTime};
 use core::fmt;
+use chrono::{DateTime, Duration, Local, NaiveTime, Timelike};
 use iso8601;
 use regex::Regex;
 use lazy_static::lazy_static;
 use yaml_rust2::Yaml;
 use crate::error::{OpenHemsError, ResultOpenHems};
+use chrono::{MappedLocalTime, NaiveDateTime};
 
 lazy_static!{
 	pub static ref REGEX_HOUR_MIN_SEC: Regex = Regex::new(r"^([0-9]+):|h([0-9]+):|m([0-9]+)$").unwrap();
 	pub static ref REGEX_HOUR_MIN: Regex = Regex::new(r"^([0-9]+):|h([0-9]+)").unwrap();
 	pub static ref REGEX_HOUR: Regex = Regex::new(r"^([0-9]+)h?$").unwrap();
-	pub static ref MIN_DATETIME: LocalDateTime = LocalDateTime::at(0);
+	pub static ref MIN_DATETIME: DateTime<Local> = if let MappedLocalTime::Single(d) = NaiveDateTime::default().and_local_timezone(Local) {d}  else {
+		panic!("Fail init MIN_DATETIME");
+	};
  }
 
-fn from_openhems_str(input: &str) -> ResultOpenHems<LocalTime> {
+fn from_openhems_str(input: &str) -> ResultOpenHems<NaiveTime> {
 	if let Ok(fields) = iso8601::time(input) {
-		return LocalTime::hm(
-				i8::try_from(fields.hour).unwrap(), 
-				i8::try_from(fields.minute).unwrap()
-			)
-			.map_err(|e| OpenHemsError::new(
-				format!("from_openhems_str(iso8601::time) {}",e.to_string())
-			));
+		if let Some(t) = NaiveTime::from_hms_opt (
+				u32::try_from(fields.hour).unwrap(), 
+				u32::try_from(fields.minute).unwrap(),
+				0
+			) {
+				return Ok(t);
+			} else {
+				return Err(OpenHemsError::new(format!("")))
+			}
 	}
 	if let Some(caps) = REGEX_HOUR_MIN_SEC.captures(input) {
-        let hour = caps[1].parse::<i8>().unwrap();
-        let min = caps[2].parse::<i8>().unwrap();
-        let sec = caps[3].parse::<i8>().unwrap();
-		return LocalTime::hms(hour, min, sec)
-			.map_err(|e| OpenHemsError::new(
-				format!("from_openhems_str(HOUR_MIN_SEC) {}",e.to_string())
-			));
+        let hour = caps[1].parse::<u32>().unwrap();
+        let min = caps[2].parse::<u32>().unwrap();
+        let sec = caps[3].parse::<u32>().unwrap();
+		if let Some(t) = NaiveTime::from_hms_opt (hour, min, sec) {
+			return Ok(t);
+		} else {
+			return Err(OpenHemsError::new(format!("from_openhems_str(HOUR_MIN_SEC)")))
+		}
     }
 	if let Some(caps) = REGEX_HOUR_MIN.captures(input) {
-        let hour = caps[1].parse::<i8>().unwrap();
-        let min = caps[2].parse::<i8>().unwrap();
-		return LocalTime::hms(hour, min, 0)
-			.map_err(|e| OpenHemsError::new(
-				format!("from_openhems_str(HOUR_MIN) {}",e.to_string())
-			));
+        let hour = caps[1].parse::<u32>().unwrap();
+        let min = caps[2].parse::<u32>().unwrap();
+		if let Some(t) = NaiveTime::from_hms_opt (hour, min, 0) {
+			return Ok(t);
+		} else {
+			return Err(OpenHemsError::new(format!("from_openhems_str(HOUR_MIN_SEC)")))
+		}
     }
 	if let Some(caps) = REGEX_HOUR.captures(input) {
-        let hour = caps[1].parse::<i8>().unwrap();
-		return LocalTime::hms(hour, 0, 0)
-			.map_err(|e| OpenHemsError::new(
-				format!("from_openhems_str(HOUR) {}",e.to_string())
-			));
+        let hour = caps[1].parse::<u32>().unwrap();
+		if let Some(t) = NaiveTime::from_hms_opt (hour, 0, 0) {
+			return Ok(t);
+		} else {
+			return Err(OpenHemsError::new(format!("from_openhems_str(HOUR_MIN_SEC)")))
+		}
     }
 
 	Err(OpenHemsError::new(format!("Fail parse {input}")))
@@ -53,15 +61,20 @@ fn from_openhems_str(input: &str) -> ResultOpenHems<LocalTime> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct HoursRange {
-	pub start: LocalTime,
-	pub end: LocalTime,
+	pub start: NaiveTime,
+	pub end: NaiveTime,
 	pub cost: f32
 }
 impl HoursRange {
 	pub fn from(config:&Yaml, default_cost:f32) -> ResultOpenHems<HoursRange> {
+		let start = if let Some(v) = NaiveTime::from_num_seconds_from_midnight_opt(0, 0) {
+			v
+		} else {
+			return Err(OpenHemsError::new(format!("")))
+		};
 		let mut ret = HoursRange {
-			start: LocalTime::midnight(),
-			end: LocalTime::midnight(),
+			start: start,
+			end: start.clone(),
 			cost: default_cost,
 		};
 		let mut ko = true;
@@ -126,16 +139,16 @@ impl HoursRange {
 			Ok(false)
 		}
 	}
-	pub fn get_end(&self, now:LocalDateTime) -> LocalDateTime {
+	pub fn get_end(&self, now:DateTime<Local>) -> DateTime<Local> {
 		let start = now.time();
 		let nbseconds = HoursRanges::get_timetowait(&start, &self.end);
 		// println!("get_end() : Add {nbseconds} seconds. {start:?} - {:?}", self.end);
-		now.add_seconds(nbseconds)
+		now + Duration::seconds(nbseconds as i64)
 	}
-	pub fn get_start(&self, now:LocalDateTime) -> LocalDateTime {
+	pub fn get_start(&self, now:DateTime<Local>) -> DateTime<Local> {
 		let end = now.time();
 		let nbseconds = HoursRanges::get_timetowait(&self.start, &end);
-		now.add_seconds(-nbseconds)
+		now - Duration::seconds(nbseconds as i64)
 	}
 }
 
@@ -148,9 +161,9 @@ pub struct HoursRanges {
 	index: u32,
 	ranges:Vec<HoursRange>,
 	min_cost: f32,
-	range_end: LocalDateTime,
-	timeout: Option<LocalDateTime>,
-	time_start: Option<LocalDateTime>,
+	range_end: DateTime<Local>,
+	timeout: Option<DateTime<Local>>,
+	time_start: Option<DateTime<Local>>,
 	timeout_callback: Option<Box<dyn HoursRangesCallback>>,
 }
 impl fmt::Debug for HoursRanges {
@@ -179,8 +192,8 @@ impl Clone for HoursRanges {
 		}
 	}
 }
-fn fmt(a:&LocalTime) -> String {
-	let mut seconds = a.to_seconds();
+fn fmt(a:&NaiveTime) -> String {
+	let mut seconds = a.num_seconds_from_midnight();
 	let  hours = seconds/3600;
 	seconds -= hours*3600;
 	let  min = seconds/60;
@@ -205,7 +218,7 @@ impl fmt::Display for HoursRanges {
 
 impl HoursRanges {
 	pub fn from(hoursranges_list:&Yaml, 
-			time_start:Option<LocalDateTime>, timeout:Option<LocalDateTime>,
+			time_start:Option<DateTime<Local>>, timeout:Option<DateTime<Local>>,
 			timeout_callback:Option<Box<dyn HoursRangesCallback>>,
 			default_cost:f32, outrange_cost:f32
 	) -> ResultOpenHems<HoursRanges> {
@@ -237,7 +250,7 @@ impl HoursRanges {
 	}
 	fn fill_ranges(&mut self, outrange_cost:f32) -> ResultOpenHems<()> {
 		if self.ranges.len()==0 {
-			/* let midnight = LocalTime::midnight();
+			/* let midnight = NaiveTime::midnight();
 			ranges.insert(HoursRange{
 				start: midnight,
 				end: midnight,
@@ -246,21 +259,21 @@ impl HoursRanges {
 			return Ok(());
 		}
 		self.ranges.sort_by(|a, b| {
-			a.start.to_seconds().cmp(&b.start.to_seconds())
+			a.start.num_seconds_from_midnight().cmp(&b.start.num_seconds_from_midnight())
 		});
 		let firstbegin = self.ranges[0].end;
 		let mut lastend = self.ranges[self.ranges.len()-1].end;
 		let mut addedranges: Vec<HoursRange> = Vec::new();
 		for range in self.ranges.iter() {
 			// print("range:", begin, end, "lastEnd:", lastEnd)
-			if lastend.to_seconds()<range.start.to_seconds() {
+			if lastend.num_seconds_from_midnight()<range.start.num_seconds_from_midnight() {
 				addedranges.push(
 					HoursRange {
 						start:lastend,
 						end: range.start,
 						cost: outrange_cost
 				})
-			} else if range.start.to_seconds()<lastend.to_seconds() { // Should be equal
+			} else if range.start.num_seconds_from_midnight()<lastend.num_seconds_from_midnight() { // Should be equal
 				return Err(OpenHemsError::new(
 					format!("HoursRanges : ranges are crossing : {:?} < {:?}", range.start, lastend)
 				))
@@ -271,7 +284,7 @@ impl HoursRanges {
 			lastend = range.end;
 		}
 		// Close the cycle from end to the begeining
-		if lastend.to_seconds()!=firstbegin.to_seconds() {
+		if lastend.num_seconds_from_midnight()!=firstbegin.num_seconds_from_midnight() {
 			self.ranges.push(HoursRange{
 				start: lastend,
 				end: firstbegin,
@@ -282,26 +295,26 @@ impl HoursRanges {
 			self.ranges.extend(addedranges.iter());
 		}
 		self.ranges.sort_by(|a, b| {
-			a.start.to_seconds().cmp(&b.start.to_seconds())
+			a.start.num_seconds_from_midnight().cmp(&b.start.num_seconds_from_midnight())
 		});
 		Ok(())
 	}
 	pub fn is_offpeak(&self, range:&HoursRange) -> bool {
 		self.min_cost==range.cost
 	}
-	pub fn get_timetowait(from:&LocalTime, to:&LocalTime) -> i64 {
+	pub fn get_timetowait(from:&NaiveTime, to:&NaiveTime) -> u32 {
 		// "10:00", "02:00"
-		let from_s = from.to_seconds();
-		let to_s = to.to_seconds();
-		let mut dt = to_s-from_s;
-		if dt<0 {
-			dt += 24*3600;
+		let from_s = from.num_seconds_from_midnight();
+		let to_s = to.num_seconds_from_midnight();
+		if to_s<from_s {
+			24*3600  + to_s - from_s
+		} else {
+			to_s - from_s
 		}
 		// println!("get_timetowait({:?} - {:?}) : {to_s}-{from_s} = {dt}", from , to);
-		dt
 		// print("getTimeToWait(",self.time,", ",nextTime,") = ",wait)
 	}
-	pub fn check_range(&self, now:LocalDateTime) -> ResultOpenHems<&HoursRange> {
+	pub fn check_range(&self, now:DateTime<Local>) -> ResultOpenHems<&HoursRange> {
 		// Check range validity of this hoursRange
 		if let Some(time) = self.time_start {
 			if now<time {
@@ -336,7 +349,7 @@ impl HoursRanges {
 
 #[cfg(test)]
 mod tests {
-	use datetime::{DatePiece, LocalDate, Month};
+use chrono::NaiveDate;
 use yaml_rust2::YamlLoader;
     use super::*;
 
@@ -347,10 +360,12 @@ use yaml_rust2::YamlLoader;
 		let ranges = HoursRanges::from(config, 
 			None, None, None, 0.0, 1.0)?;
 		println!("{ranges}");
-		let date = LocalDate::ymd(2025, Month::April, 28).unwrap();
-		let time = LocalTime::hm(11, 00).unwrap();
-		let now = LocalDateTime::new(date, time);
-		let range = ranges.check_range(now)?;
+		let dt = Local::now();
+		let offset = dt.offset().clone();
+		let mut dt = NaiveDate::from_ymd_opt(2025, 04, 28).unwrap()
+			.and_hms_milli_opt(9, 10, 11, 12).unwrap();
+		let time = DateTime::<Local>::from_naive_utc_and_offset(dt, offset);
+		let range = ranges.check_range(time)?;
 		assert_eq!(ranges.is_offpeak(&range), false);
 		Ok(())
     }
