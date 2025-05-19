@@ -6,7 +6,7 @@ use yaml_rust2::Yaml;
 use crate::error::{OpenHemsError, ResultOpenHems};
 use crate::network::Network;
 use crate::node::Node;
-use crate::time::HoursRange;
+use crate::time::{self, HoursRange};
 
 pub trait EnergyStrategy {
 	fn get_strategy_id(&self) -> &str;
@@ -54,9 +54,7 @@ impl<'a, 'b:'a> EnergyStrategy for OffPeakStrategy {
 		Ok(100000)
 	}
 	fn new(network:Rc<RefCell<Network>>, id:&str, _config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy> {
-		let rangeend = if let MappedLocalTime::Single(d) = NaiveDateTime::default().and_local_timezone(Local) {d}  else {
-			return Err(OpenHemsError::new(format!("")));
-		};
+		let rangeend = time::MIN_DATETIME.clone();
 		Ok(OffPeakStrategy {
 			id: id.to_string(),
 			inoffpeakrange: false,

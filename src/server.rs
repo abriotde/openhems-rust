@@ -2,11 +2,7 @@ use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, thread::sleep, time::Dura
 use chrono::{DateTime, Local, MappedLocalTime, NaiveDate, NaiveDateTime};
 use yaml_rust2::Yaml;
 use crate::{
-	error::{OpenHemsError, ResultOpenHems},
-	network::Network,
-	offpeak_strategy::{EnergyStrategy, OffPeakStrategy},
-	utils::get_yaml_key,
-	configuration_manager::ConfigurationManager
+	configuration_manager::ConfigurationManager, error::{OpenHemsError, ResultOpenHems}, network::Network, offpeak_strategy::{EnergyStrategy, OffPeakStrategy}, time, utils::get_yaml_key
 };
 
 // #[derive(Clone)]
@@ -28,12 +24,8 @@ impl<'a> Debug for Server {
 impl<'a> Server {
 	pub fn new(configurator: &ConfigurationManager) -> ResultOpenHems<Server> {
 		let allowsleep = true;
-		let now = if let MappedLocalTime::Single(d) = NaiveDateTime::default().and_local_timezone(Local) {d}  else {
-			panic!("Fail init MIN_DATETIME");
-		};
-		NaiveDate::from_ymd_opt(1970, 1, 1);
+		let now = time::MIN_DATETIME.clone();
 		let loopdelay = configurator.get_as_int("server.loopDelay") as u64;
-		assert!(loopdelay>=0);
 		let strategies = Vec::new();
 		let hems_server = Server {
 			network: Rc::new(RefCell::new(Network::new(configurator)?)),
