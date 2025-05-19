@@ -204,6 +204,7 @@ impl<'a> HomeAssistantAPI {
 			"entity_id": entity_id
 		});
 		let expect = if on {"on"} else {"off"};
+		log::info!("Switching '{entity_id}' to {expect}.");
 		let url = format!("/services/switch/turn_{}", expect);
 		if let JsonValue::Array(response) = self.call_api(&url, Some(data))? {
 			if let Some(states) = response.get(0) {
@@ -323,8 +324,10 @@ impl<'a, 'b:'a, 'c:'b> HomeStateUpdater for HomeAssistantAPI {
 				Ok(*value)
 			}
 			JsonValue::Short(value) => {
-				let v2 = value.as_str();
-				Ok(v2!="0")
+				let v2 = value.as_str().to_lowercase();
+				let false_value = ["0", "false", "off"].iter().any(|&s| s==v2);
+				// log::debug!("HomeAssistantAPI::get_entity_value_bool({v2}) => not {false_value}");
+				Ok(!false_value)
 			}
 			_ => {
 				let message = format!("Value can not be parsed as bool : {:?} ", v);

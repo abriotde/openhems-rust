@@ -163,12 +163,13 @@ pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase, pritority: u32, strategy_nam
 }
 impl Switch {
 	pub fn switch(&self, on:bool) -> ResultOpenHems<()> {
-		log::info!("{}.switch(on={on})", self.get_id());
+		log::debug!("{}.switch(on={on})", self.get_id());
 		if let Feeder::Source(mut feeder) = self.is_on.clone() {
 			let on2 = if self.get_schedule().is_scheduled() {on} // Switch on only if scheduled
 				else {false}; // else don't
+			log::debug!("Switch {}: is_on={} -> is_scheduled={}", self.get_id(), feeder.get_value()?, on2);
 			if feeder.get_value()?!=on2 {
-				return feeder.switch(feeder.get_nameid().as_str(), on);
+				return feeder.switch(feeder.get_nameid().as_str(), on2);
 			}
 		}
 		Ok(())

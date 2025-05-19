@@ -147,8 +147,7 @@ impl HoursRange {
 		}
 	}
 	pub fn get_end(&self, now:&DateTime<Local>) -> DateTime<Local> {
-		let start = now.time();
-		time2datetime(&start, now)
+		time2datetime(&self.end, now)
 	}
 	pub fn get_start(&self, now:DateTime<Local>) -> DateTime<Local> {
 		let end = now.time();

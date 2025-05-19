@@ -76,7 +76,7 @@ impl<'a, 'b:'a, 'c:'b, 'd:'c> OffPeakStrategy {
 		let network = self.network.borrow_mut();
 		for elem in network.get_all_switch("all") {
 			if let Err(err) = elem.switch(true) {
-				log::warn!("Fail switch off '{}' : {}", elem.get_id(), err.message);
+				log::warn!("Fail switch on '{}' : {}", elem.get_id(), err.message);
 				ok = false;
 			}
 		}

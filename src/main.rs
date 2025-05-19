@@ -45,6 +45,7 @@ fn start_web_server(shared_state: Arc<AppState>) -> std::thread::JoinHandle<()> 
 					.route("/", actix_web::web::get().to(web::index))
 					.route("/states", actix_web::web::post().to(web::states))
 				})
+    			.workers(1)
 				.bind("127.0.0.1:8000")
 				.unwrap()
 				.run();
