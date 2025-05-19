@@ -1,15 +1,16 @@
+use actix_files as fs;
+use std::sync::{Arc, Mutex};
 use log;
 use chrono::{self};
-use rocket::tokio;
 use schedule::Schedule;
-use std::time::Duration;
+use tera::Tera;
+use web::AppState;
 use env_logger;
 use server::Server;
-use std::{io::Write, os::unix::thread, thread::sleep, thread::spawn};
+use std::{io::Write};
 // use actix_web::{get, web, App, HttpServer, Responder};
 use std::sync::mpsc::channel;
-use axum::{Router, routing::get};
-use std::net::SocketAddr;
+use actix_web::{App, HttpServer};
 
 mod utils;
 mod home_assistant_api;
@@ -26,20 +27,37 @@ mod server;
 mod schedule;
 mod web;
 
-fn start_web_server() {
-    // Spawn a new thread to run the web server
+
+fn start_web_server(shared_state: Arc<AppState>) -> std::thread::JoinHandle<()> {
+    let tera = Tera::new("templates/**/*.jinja2")
+        .expect("Failed to parse templates");
     std::thread::spawn(|| {
-        // Create a new Tokio runtime for this thread
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let app = Router::new().route("/", get(web::hello_world));
-            let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
-            axum_server::bind(addr)
-                .serve(app.into_make_service())
-                .await
-                .unwrap();
+        // Create an Actix runtime in the new thread
+        let sys = actix_rt::System::new();
+        sys.block_on(async {
+            let server = HttpServer::new(move || {
+                App::new()
+					.service(fs::Files::new("/js", "./js").show_files_listing())
+					.service(fs::Files::new("/css", "./css").show_files_listing())
+					.service(fs::Files::new("/img", "./img").show_files_listing())
+          			.app_data(actix_web::web::Data::new(tera.clone()))
+					.app_data(actix_web::web::Data::new(shared_state.clone()))
+					.route("/", actix_web::web::get().to(web::index))
+					.route("/states", actix_web::web::post().to(web::states))
+				})
+				.bind("127.0.0.1:8000")
+				.unwrap()
+				.run();
+			// // Listen for Ctrl+C in the Actix runtime thread
+			// let server_handle = server.handle();
+			// actix_web::rt::spawn(async move {
+			// 	actix_web::rt::signal::ctrl_c().await.unwrap();
+			// 	server_handle.stop(true).await;
+			// 	panic!("Server stopped");
+			// });
+			server.await.unwrap();
         });
-    });
+    })
 }
 
 fn main() {
@@ -64,18 +82,21 @@ fn main() {
 	if let Err(err) = configurator.add_yaml_config(file_path, false) {
 		log::error!("Fail load configuration {file_path} : {err}");
 	}
+	let mut appstate = AppState::new();
 	match Server::new(&configurator) {
 		Err(err) =>  {
 			log::error!("Fail configure server : {}", err.message);
 		}
 		Ok(mut hems_server) => {
-			if let Err(err) = hems_server.init(&configurator) {
+			if let Err(err) = hems_server.init(&configurator, &mut appstate) {
 				log::error!("Fail init server : {}", err.message);
 			}
+			let appstate2 = Arc::new(appstate);
 			log::info!("Server : {:?}", hems_server);
 			let (tx, rx) = channel::<Schedule>();
-			start_web_server();
-			hems_server.run();
+			let httpserver = start_web_server(Arc::clone(&appstate2));
+			hems_server.run(appstate2);
+			httpserver.join().unwrap();
 		}
 	}
 }

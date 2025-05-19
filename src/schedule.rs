@@ -45,10 +45,13 @@ impl Schedule {
 	pub fn set_timeout(&mut self, timeout:&DateTime<Local>) {
 		self.timeout = timeout.clone();
 	}
-	pub fn get_duration(&mut self) -> u32 {
+	pub fn get_duration(&self) -> u32 {
 		self.duration
 	}
-	pub fn get_timeout(&mut self) -> &DateTime<Local> {
+	pub fn get_timeout(&self) -> &DateTime<Local> {
 		&self.timeout
+	}
+	pub fn get_name(&self) -> &str {
+		&self.nameid
 	}
 }

@@ -36,7 +36,7 @@ impl<'a, 'b:'a> EnergyStrategy for OffPeakStrategy {
 			let network = self.network.borrow_mut();
 			let hoursranges = network.get_hours_ranges()?;
 			let range = hoursranges.check_range(now)?;
-			self.rangeend = range.get_end(now);
+			self.rangeend = range.get_end(&now);
 			self.inoffpeakrange = hoursranges.is_offpeak(range);
 			log::debug!("OffPeakStrategy::update_network() : refresh range end={:?}", self.rangeend);
 		}

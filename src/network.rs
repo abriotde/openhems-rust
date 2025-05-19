@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use yaml_rust2::Yaml;
 use std::fmt::{self, Display};
 use crate::configuration_manager::ConfigurationManager;
@@ -11,6 +12,7 @@ use crate::node::{self, Node};
 use crate::home_assistant_api::{HomeStateUpdater,HomeAssistantAPI};
 use crate::cast_utility;
 use crate::time::HoursRanges;
+use crate::web::AppState;
 
 // Rust equivalent of Python nodes list with multi nodes types.
 #[derive(Clone, Debug)]
@@ -87,12 +89,14 @@ impl<'a, 'b:'a> NodesHeap {
 			heap: self,
 		}
 	}
-	pub fn set_switch(& mut self, nameid:&str, updater:Rc<RefCell<HomeAssistantAPI>>, node_conf:&HashMap<String, &Yaml>) -> ResultOpenHems<()> {
+	pub fn set_switch(& mut self, nameid:&str, updater:Rc<RefCell<HomeAssistantAPI>>, 
+				node_conf:&HashMap<String, &Yaml>, appstate:&mut AppState
+			) -> ResultOpenHems<()> {
 		// println!("set_switch({nameid})");
 		let priority = HomeAssistantAPI::get_feeder_const_int(node_conf, "priority", 50);
 		let strategy_nameid = HomeAssistantAPI::get_feeder_const_str(node_conf, "strategy", "default");
 		let base = HomeAssistantAPI::get_nodebase(updater, nameid, node_conf)?;
-		let switch = node::get_switch(base, priority as u32, &strategy_nameid)?;
+		let switch = node::get_switch(base, priority as u32, &strategy_nameid, appstate)?;
 		self.switch.push(switch);
 		log::debug!("set_switch({nameid}) : Ok");
 		Ok(())
@@ -172,7 +176,7 @@ impl Network
 		};
 		Ok(network)
 	}
-	pub fn set_nodes(&mut self, configurator:&ConfigurationManager) -> () {
+	pub fn set_nodes(&mut self, configurator:&ConfigurationManager, appstate:&mut AppState) -> () {
 		let nodes_conf = configurator.get_as_list("network.nodes");
 		let count = 0;
 		for node_c in nodes_conf {
@@ -188,7 +192,7 @@ impl Network
 				}
 				match &*classname.to_lowercase() {
 					"switch" => {
-						if let Err(err) = self.nodes.set_switch(nameid.as_str(), self.updater.clone(), &node_conf) {
+						if let Err(err) = self.nodes.set_switch(nameid.as_str(), self.updater.clone(), &node_conf, appstate) {
 							let message = format!("Impossible to add switch '{nameid}' due to {}.", err.message);
 							log::error!("ERROR {}",&message);
 							self.errors.push(message);

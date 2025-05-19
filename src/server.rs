@@ -1,8 +1,8 @@
-use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, thread::sleep, time::Duration};
+use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, sync::Arc, thread::sleep, time::Duration};
 use chrono::{DateTime, Local, MappedLocalTime, NaiveDate, NaiveDateTime};
 use yaml_rust2::Yaml;
 use crate::{
-	configuration_manager::ConfigurationManager, error::{OpenHemsError, ResultOpenHems}, network::Network, offpeak_strategy::{EnergyStrategy, OffPeakStrategy}, time, utils::get_yaml_key
+	configuration_manager::ConfigurationManager, error::{OpenHemsError, ResultOpenHems}, network::Network, offpeak_strategy::{EnergyStrategy, OffPeakStrategy}, time, utils::get_yaml_key, web::AppState
 };
 
 // #[derive(Clone)]
@@ -39,9 +39,9 @@ impl<'a> Server {
 		};
 		Ok(hems_server)
 	}
-	pub fn init(&mut self, configurator: &ConfigurationManager) -> ResultOpenHems<()> {
+	pub fn init(&mut self, configurator: &ConfigurationManager, appstate:&mut AppState) -> ResultOpenHems<()> {
 		let mut network = self.network.borrow_mut();
-		network.set_nodes(configurator);
+		network.set_nodes(configurator, appstate);
 		if let Some(configuration) = configurator.get("server.strategies") {
 			if let Some(list) = configuration.clone().into_vec() {
 				let default = String::from("");
@@ -102,9 +102,14 @@ impl<'a> Server {
 			}
 		}
 	}
-	pub fn run(&mut self) {
+	pub fn run(&mut self, data: Arc<AppState>) {
+		let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    	let r = running.clone();
+		ctrlc::set_handler(move || {
+			r.store(false, std::sync::atomic::Ordering::SeqCst);
+		}).expect("Failed to set Ctrl+C handler");
 		log::info!("Run OpenHEMS core server with loop-delay={}", self.loopdelay);
-		loop {
+		while running.load(std::sync::atomic::Ordering::SeqCst) {
 			let now = Local::now();
 			let nextloop = now + Duration::from_secs(self.loopdelay);
 			self.loop1(now);

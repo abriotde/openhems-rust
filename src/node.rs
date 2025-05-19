@@ -1,7 +1,7 @@
 use core::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::Mutex;
+use std::sync::{Arc, MutexGuard, Mutex};
 use arrayvec::ArrayString;
 use chrono::{DateTime, Local};
 use crate::error::{OpenHemsError, ResultOpenHems};
@@ -9,6 +9,7 @@ use crate::feeder::{Feeder, SourceFeeder};
 use crate::contract::Contract;
 use crate::schedule::Schedule;
 use crate::time;
+use crate::web::AppState;
 
 #[derive(Clone)]
 pub enum NodeType {
@@ -142,11 +143,14 @@ pub struct Switch {
 	// Switch
 	_pritority: u32,
 	_strategy_nameid: ArrayString<16>,
-	schedule: Schedule
+	schedule: Arc<Mutex<Schedule>>
 }
-pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase, pritority: u32, strategy_nameid: &str) -> ResultOpenHems<Switch> {
+pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase, pritority: u32, strategy_nameid: &str,
+			appstate:&mut AppState
+		) -> ResultOpenHems<Switch> {
 	if let Ok(strategy) = ArrayString::from(strategy_nameid) {
-		let sch = Schedule::new(&node.nameid);
+		let sch = Arc::new(Mutex::new(Schedule::new(&node.nameid)));
+		appstate.schedules.insert(node.nameid.to_string(), sch.clone());
 		Ok(Switch {
 			node: node,
 			_pritority: pritority,
@@ -161,7 +165,7 @@ impl Switch {
 	pub fn switch(&self, on:bool) -> ResultOpenHems<()> {
 		log::info!("{}.switch(on={on})", self.get_id());
 		if let Feeder::Source(mut feeder) = self.is_on.clone() {
-			let on2 = if self.schedule.is_scheduled() {on} // Switch on only if scheduled
+			let on2 = if self.get_schedule().is_scheduled() {on} // Switch on only if scheduled
 				else {false}; // else don't
 			if feeder.get_value()?!=on2 {
 				return feeder.switch(feeder.get_nameid().as_str(), on);
@@ -169,15 +173,15 @@ impl Switch {
 		}
 		Ok(())
 	}
-	pub fn get_schedule(&self) -> &Schedule {
-		&self.schedule
+	pub fn get_schedule<'a>(&'a self) -> MutexGuard<'a, Schedule, > {
+		self.schedule.lock().unwrap()
 	}
 	pub fn set_schedule(& mut self, duration:u32, timeout:Option<DateTime<Local>>) {
-		self.schedule.set_duration(duration);
+		self.get_schedule().set_duration(duration);
 		if let Some(t) = timeout {
-			self.schedule.set_timeout(&t);
+			self.get_schedule().set_timeout(&t);
 		} else {
-			self.schedule.set_timeout(&time::MIN_DATETIME);
+			self.get_schedule().set_timeout(&time::MIN_DATETIME);
 		}
 	}
 }

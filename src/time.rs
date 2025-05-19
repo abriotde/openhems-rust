@@ -59,6 +59,13 @@ fn from_openhems_str(input: &str) -> ResultOpenHems<NaiveTime> {
 	Err(OpenHemsError::new(format!("Fail parse {input}")))
 }
 
+pub fn time2datetime(time:&NaiveTime, now:&DateTime<Local>) -> DateTime<Local> {
+	let start = now.time();
+	let nbseconds = HoursRanges::get_timetowait(&start, time);
+	// println!("get_end() : Add {nbseconds} seconds. {start:?} - {:?}", self.end);
+	now.clone() + Duration::seconds(nbseconds as i64)
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct HoursRange {
 	pub start: NaiveTime,
@@ -139,11 +146,9 @@ impl HoursRange {
 			Ok(false)
 		}
 	}
-	pub fn get_end(&self, now:DateTime<Local>) -> DateTime<Local> {
+	pub fn get_end(&self, now:&DateTime<Local>) -> DateTime<Local> {
 		let start = now.time();
-		let nbseconds = HoursRanges::get_timetowait(&start, &self.end);
-		// println!("get_end() : Add {nbseconds} seconds. {start:?} - {:?}", self.end);
-		now + Duration::seconds(nbseconds as i64)
+		time2datetime(&start, now)
 	}
 	pub fn get_start(&self, now:DateTime<Local>) -> DateTime<Local> {
 		let end = now.time();
