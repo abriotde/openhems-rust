@@ -1,4 +1,5 @@
 use actix_files as fs;
+use serde::ser;
 use std::sync::{Arc, Mutex};
 use log;
 use chrono::{self};
@@ -94,7 +95,7 @@ fn main() {
 			}
 			let appstate2 = Arc::new(appstate);
 			log::info!("Server : {:?}", hems_server);
-			let (tx, rx) = channel::<Schedule>();
+			let _ = hems_server.network.borrow().notify("OpenHEMS started");	
 			let httpserver = start_web_server(Arc::clone(&appstate2));
 			hems_server.run(appstate2);
 			httpserver.join().unwrap();

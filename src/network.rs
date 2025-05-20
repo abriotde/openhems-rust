@@ -228,4 +228,7 @@ impl Network
 		let mut updater = self.updater.borrow_mut();
 		updater.update_network()
 	}
+	pub fn notify(&self, message:&str) -> ResultOpenHems<bool> {
+		self.updater.borrow().notify(message)
+	}
 }
