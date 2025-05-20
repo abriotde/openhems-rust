@@ -1,11 +1,9 @@
 use chrono::Local;
 use futures::StreamExt;
-use json::{object, JsonValue};
-use reqwest::Upgraded;
-use tera::Tera;
-use actix_web::{cookie::time::Date, error, Error, HttpRequest, HttpResponse};
-use std::{collections::HashMap, sync::{Arc, Mutex}};
-use crate::{node, schedule::Schedule, time};
+use json::JsonValue;
+use actix_web::{error, Error, HttpResponse};
+use std::{collections::HashMap, ops::DerefMut, sync::{Arc, Mutex}};
+use crate::{error::ResultOpenHems, schedule::Schedule, server::DecrementTime, time};
 
 const DATE_FORMAT:&str = "%d/%m/%Y";
 
@@ -17,6 +15,14 @@ impl AppState {
 		AppState {
 			schedules: HashMap::new(),
 		}
+	}
+	pub fn decrement_time(&self, duration:u32) -> ResultOpenHems<bool> {
+		log::debug!("AppState::decrement_time() for {} seconds", duration);
+		for schedule in self.schedules.values() {
+			let mut sch = schedule.lock().unwrap();
+			sch.decrement_time(duration)?;
+		}
+		Ok(true)
 	}
 }
 

@@ -5,6 +5,13 @@ use crate::{
 	configuration_manager::ConfigurationManager, error::{OpenHemsError, ResultOpenHems}, network::Network, offpeak_strategy::{EnergyStrategy, OffPeakStrategy}, time, utils::get_yaml_key, web::AppState
 };
 
+pub trait DecrementTime {
+	fn decrement_time(&mut self, duration:u32) -> ResultOpenHems<bool>;
+}
+
+
+
+
 // #[derive(Clone)]
 pub struct Server {
 	pub network: Rc<RefCell<Network>>,
@@ -14,7 +21,8 @@ pub struct Server {
 	_allowsleep: bool,
 	now: DateTime<Local>,
 	_inoverloadmode: bool,
-	_errors: Vec<String>
+	_errors: Vec<String>,
+	app_state: Arc<AppState>,
 }
 impl<'a> Debug for Server {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -35,7 +43,8 @@ impl<'a> Server {
 			_allowsleep: allowsleep,
 			now: now,
 			_inoverloadmode: false,
-			_errors: Vec::new()
+			_errors: Vec::new(),
+			app_state: Arc::new(AppState::new()),
 		};
 		Ok(hems_server)
 	}
@@ -80,9 +89,17 @@ impl<'a> Server {
 		}
 		Ok(())
 	}
-	pub fn loop1(&mut self, now:DateTime<Local>) {
-		log::info!("Now: {:?}", now);
+	pub fn loop1(&mut self, now:DateTime<Local>, duration:u32) {
+		log::info!("Server::loop1({:?}, {})", now, duration);
 		self.now = now;
+		if duration> 0 {
+			self.app_state.decrement_time(duration).unwrap();
+			/* for d in self.decrement_time.iter_mut() {
+				if let Err(err) = d.decrement_time(duration) {
+					log::error!("Fail decrement time : {}", err.message);
+				}
+			} */
+		}
 		let mut sleep_duration = self.loopdelay;
 		{
 			let mut network = self.network.borrow_mut();
@@ -103,23 +120,28 @@ impl<'a> Server {
 		}
 	}
 	pub fn run(&mut self, data: Arc<AppState>) {
+		self.app_state = data;
 		let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
     	let r = running.clone();
 		ctrlc::set_handler(move || {
 			r.store(false, std::sync::atomic::Ordering::SeqCst);
 		}).expect("Failed to set Ctrl+C handler");
 		log::info!("Run OpenHEMS core server with loop-delay={}", self.loopdelay);
+		let mut duration = 0;
+		let loopdelay = Duration::from_secs(self.loopdelay);
 		while running.load(std::sync::atomic::Ordering::SeqCst) {
 			let now = Local::now();
-			let nextloop = now + Duration::from_secs(self.loopdelay);
-			self.loop1(now);
+			let nextloop = now + loopdelay;
+			self.loop1(now, duration);
 			let t = Local::now();
 			if t<nextloop {
 				let secs = nextloop - t;
+				duration = self.loopdelay as u32;
 				log::info!("Sleep for {} seconds.", secs.num_seconds());
 				sleep(secs.to_std().unwrap());
 			} else if t>nextloop {
 				let secs = (t - nextloop).as_seconds_f32();
+				duration = self.loopdelay as u32 + secs as u32;
 				log::warn!("Missing {secs} seconds for the loop.");
 			}
 		}
