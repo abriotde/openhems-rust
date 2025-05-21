@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use yaml_rust2::Yaml;
@@ -122,7 +122,7 @@ impl<'a, 'b:'a> NodesHeap {
 	pub fn get_all_switch(&self, _pattern:&str) -> &Vec<node::Switch> {
 		& self.switch
 	}
-	pub fn get_all_switch_mut(&mut self, _pattern:&str) -> &mut Vec<node::Switch> {
+	pub fn get_all_switch_mut(&'a mut self, _pattern:&str) -> &'a mut Vec<node::Switch> {
 		&mut self.switch
 	}
 	pub fn get_all_solarpanel(&self, _pattern:&str) -> &Vec<node::SolarPanel> {
@@ -163,6 +163,12 @@ impl Deref for Network
 	type Target = NodesHeap;
 	fn deref(&self) -> &<Self as Deref>::Target {
 		&self.nodes
+	}
+}
+impl DerefMut for Network 
+{
+	fn deref_mut(&mut self) -> &mut NodesHeap {
+		&mut self.nodes
 	}
 }
 
