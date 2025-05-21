@@ -2,7 +2,7 @@ use std::{cell::RefCell, cmp::min, fmt::Debug, rc::Rc, sync::Arc, thread::sleep,
 use chrono::{DateTime, Local, MappedLocalTime, NaiveDate, NaiveDateTime};
 use yaml_rust2::Yaml;
 use crate::{
-	configuration_manager::ConfigurationManager, error::{OpenHemsError, ResultOpenHems}, network::Network, offpeak_strategy::{EnergyStrategy, OffPeakStrategy}, time, utils::get_yaml_key, web::AppState
+	configuration_manager::ConfigurationManager, error::{OpenHemsError, ResultOpenHems}, network::Network, offpeak_strategy::{EnergyStrategy, OffPeakStrategy}, solarnosell_strategy::SolarNoSellStrategy, time, utils::get_yaml_key, web::AppState
 };
 
 pub trait DecrementTime {
@@ -16,7 +16,7 @@ pub trait DecrementTime {
 pub struct Server {
 	pub network: Rc<RefCell<Network>>,
 	loopdelay: u64,
-	strategies: Vec<OffPeakStrategy>,
+	strategies: Vec<Box<dyn EnergyStrategy>>,
 	cycleid: u32,
 	_allowsleep: bool,
 	now: DateTime<Local>,
@@ -74,7 +74,12 @@ impl<'a> Server {
 						}
 						match classname.to_lowercase().as_str() {
 							"offpeak" => {
-								self.strategies.push(OffPeakStrategy::new(Rc::clone(&self.network), &id, conf)?);
+								let strategy = OffPeakStrategy::new(self.network.clone(), id, conf)?;
+								self.strategies.push(Box::new(strategy));
+							}
+							"solarnosell" => {
+								let strategy = SolarNoSellStrategy::new(self.network.clone(), id, conf)?;
+								self.strategies.push(Box::new(strategy));
 							}
 							_ => {
 								return Err(OpenHemsError::new(format!(

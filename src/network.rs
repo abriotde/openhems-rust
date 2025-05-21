@@ -19,7 +19,7 @@ use crate::web::AppState;
 pub struct NodesHeap {
 	publicpowergrid: Option<node::PublicPowerGrid>,
 	switch: Vec<node::Switch>,
-	// solarpanel: Vec<node::SolarPanel>,
+	solarpanel: Vec<node::SolarPanel>,
 	// battery: Vec<node::Battery>,
 }
 #[derive(Clone, Debug)]
@@ -76,7 +76,7 @@ impl<'a, 'b:'a> NodesHeap {
 		NodesHeap {
 			publicpowergrid: None,
 			switch: Vec::new(),
-			// solarpanel: Vec<node::SolarPanel>,
+			solarpanel: Vec::new(),
 			// battery: Vec<node::Battery>,
 		}
 	}
@@ -121,6 +121,26 @@ impl<'a, 'b:'a> NodesHeap {
 	}
 	pub fn get_all_switch(&self, _pattern:&str) -> &Vec<node::Switch> {
 		& self.switch
+	}
+	pub fn get_all_switch_mut(&mut self, _pattern:&str) -> &mut Vec<node::Switch> {
+		&mut self.switch
+	}
+	pub fn get_all_solarpanel(&self, _pattern:&str) -> &Vec<node::SolarPanel> {
+		& self.solarpanel
+	}
+	pub fn get_current_power(&self, filter:&str) -> ResultOpenHems<f32> {
+		let mut current_power = 0.0;
+		if ["", "all", "publicpowergrid"].iter().any(|&s| s==filter) {
+			if let Some(power) = &self.publicpowergrid {
+				current_power += power.clone().get_current_power()?;
+			}
+		}
+		if ["", "all", "solarpanel"].iter().any(|&s| s==filter) {
+			for solarpanel in &self.solarpanel {
+				current_power += solarpanel.clone().get_current_power()?;
+			}
+		}
+		Ok(current_power)
 	}
 }
 

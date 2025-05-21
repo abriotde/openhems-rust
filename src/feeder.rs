@@ -36,7 +36,7 @@ pub enum Feeder<T:FeederOutType<T>+Clone> {
 	Const(ConstFeeder<T>)
 }
 impl<'a> Feeder<bool> {
-	pub fn get_value(&mut self) -> ResultOpenHems<bool> {
+	pub fn get_value(&self) -> ResultOpenHems<bool> {
 		match self.clone() {
 			Feeder::Source(mut feeder) => {
 				feeder.get_value()
@@ -86,7 +86,7 @@ impl<'a, 'b:'a, T:FeederOutType<T>+Clone> SourceFeeder<T> {
 	pub fn get_nameid(&self) -> &ArrayString<64> {
 		&self.nameid
 	}
-	pub fn switch(&self, nameid:&str, on:bool) -> ResultOpenHems<()>{
+	pub fn switch(&self, nameid:&str, on:bool) -> ResultOpenHems<bool>{
 		let updater = self.source.borrow();
 		updater.switch(nameid, on)
 	}

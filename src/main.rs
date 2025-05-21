@@ -27,6 +27,7 @@ mod contract;
 mod server;
 mod schedule;
 mod web;
+mod solarnosell_strategy;
 
 
 fn start_web_server(shared_state: Arc<AppState>) -> std::thread::JoinHandle<()> {

@@ -9,10 +9,9 @@ use crate::node::Node;
 use crate::time::{self, HoursRange};
 
 pub trait EnergyStrategy {
-	fn get_strategy_id(&self) -> &str;
+	fn get_id(&self) -> &str;
 	fn get_nodes(&self) -> &Vec<Box<dyn Node>>;
 	fn update_network(&mut self, now:DateTime<Local>) -> ResultOpenHems<u64>;
-	fn new(network:Rc<RefCell<Network>>, id:&str, config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy>;
 }
 // #[derive(Clone)]
 pub struct OffPeakStrategy {
@@ -25,7 +24,7 @@ pub struct OffPeakStrategy {
 }
 
 impl<'a, 'b:'a> EnergyStrategy for OffPeakStrategy {
-	fn get_strategy_id(&self) -> &str {
+	fn get_id(&self) -> &str {
 		&self.id
 	}
 	fn get_nodes(&self) -> &Vec<Box<dyn Node>> {
@@ -53,7 +52,10 @@ impl<'a, 'b:'a> EnergyStrategy for OffPeakStrategy {
 		}
 		Ok(100000)
 	}
-	fn new(network:Rc<RefCell<Network>>, id:&str, _config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy> {
+}
+
+impl<'a, 'b:'a, 'c:'b, 'd:'c> OffPeakStrategy {
+	pub fn new(network:Rc<RefCell<Network>>, id:&str, _config:&LinkedHashMap<Yaml, Yaml>) -> ResultOpenHems<OffPeakStrategy> {
 		let rangeend = time::MIN_DATETIME.clone();
 		Ok(OffPeakStrategy {
 			id: id.to_string(),
@@ -64,9 +66,6 @@ impl<'a, 'b:'a> EnergyStrategy for OffPeakStrategy {
 			network: network
 		})
 	}
-}
-
-impl<'a, 'b:'a, 'c:'b, 'd:'c> OffPeakStrategy {
 	pub fn get_id(&self) -> &str {
 		&self.id
 	}

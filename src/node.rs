@@ -18,6 +18,7 @@ pub enum NodeType {
     // #[lang = "Switch"]
     Switch,
 	PublicPowerGrid,
+	SolarPanel,
 }
 impl fmt::Display for NodeType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -31,6 +32,9 @@ impl fmt::Display for NodeType {
 			}
 			NodeType::PublicPowerGrid => {
 				s = "PublicPowerGrid";
+			}
+			NodeType::SolarPanel => {
+				s = "SolarPanel";
 			}
 		}
         write!(f, "{}", s)
@@ -49,6 +53,9 @@ impl fmt::Debug for NodeType {
 			NodeType::PublicPowerGrid => {
 				s = "PublicPowerGrid";
 			}
+			NodeType::SolarPanel => {
+				s = "SolarPanel";
+			}
 		}
         write!(f, "{}", s)
     }
@@ -58,10 +65,10 @@ impl NodeType {
 pub trait Node {
 	fn get_type(&self) -> NodeType;
 	fn get_id(&self) -> &str;
-	fn get_min_power(&mut self) -> f32;
-	fn get_max_power(&mut self) -> f32;
+	fn get_min_power(&self) -> f32;
+	fn get_max_power(&self) -> f32;
 	fn get_current_power(&mut self) -> ResultOpenHems<f32>;
-	fn is_on(&mut self) -> ResultOpenHems<bool>;
+	fn is_on(&self) -> ResultOpenHems<bool>;
 	fn is_activate(&mut self) -> bool;
 }
 impl fmt::Display for dyn Node {
@@ -115,16 +122,16 @@ impl<'a, 'b:'a, 'c:'b> Node for NodeBase {
 	fn get_id(&self) -> &str {
 		&self.nameid
 	}
-    fn get_min_power(&mut self) -> f32 {
+    fn get_min_power(&self) -> f32 {
 		self.min_power
 	}
-    fn get_max_power(&mut self) -> f32 {
+    fn get_max_power(&self) -> f32 {
 		self.max_power
 	}
     fn get_current_power(&mut self) -> ResultOpenHems<f32> {
 		Ok(self.current_power.get_value()?)
 	}
-    fn is_on(&mut self) -> ResultOpenHems<bool> {
+    fn is_on(&self) -> ResultOpenHems<bool> {
 		Ok(self.is_on.get_value()?)
 	}
     fn is_activate(&mut self) -> bool {
@@ -162,7 +169,7 @@ pub fn get_switch<'a, 'b:'a, 'c:'b>(node: NodeBase, pritority: u32, strategy_nam
 	}
 }
 impl Switch {
-	pub fn switch(&self, on:bool) -> ResultOpenHems<()> {
+	pub fn switch(&self, on:bool) -> ResultOpenHems<bool> {
 		log::debug!("{}.switch(on={on})", self.get_id());
 		if let Feeder::Source(mut feeder) = self.is_on.clone() {
 			let on2 = if self.get_schedule().is_scheduled() {on} // Switch on only if scheduled
@@ -172,7 +179,7 @@ impl Switch {
 				return feeder.switch(feeder.get_nameid().as_str(), on2);
 			}
 		}
-		Ok(())
+		Ok(true)
 	}
 	pub fn get_schedule<'a>(&'a self) -> MutexGuard<'a, Schedule, > {
 		self.schedule.lock().unwrap()
@@ -197,16 +204,16 @@ impl<'a, 'b:'a, 'c:'b> Node for Switch {
 	fn get_id(&self) -> &str {
 		self.node.get_id()
 	}
-    fn get_min_power(&mut self) -> f32 {
+    fn get_min_power(&self) -> f32 {
 		self.node.get_min_power()
 	}
-    fn get_max_power(&mut self) -> f32 {
+    fn get_max_power(&self) -> f32 {
 		self.node.get_max_power()
 	}
     fn get_current_power(&mut self) -> ResultOpenHems<f32> {
 		self.node.get_current_power()
 	}
-    fn is_on(&mut self) -> ResultOpenHems<bool> {
+    fn is_on(&self) -> ResultOpenHems<bool> {
 		self.node.is_on()
 	}
     fn is_activate(&mut self) -> bool {
@@ -217,7 +224,7 @@ impl<'a, 'b:'a, 'c:'b> Node for Switch {
 	}
 }
 
-#[derive(Clone, Debug)] // Clone, 
+#[derive(Clone, Debug)] // Clone
 pub struct PublicPowerGrid {
 	// Node
 	node: NodeBase,
@@ -247,16 +254,73 @@ impl<'a, 'b:'a, 'c:'b> Node for PublicPowerGrid {
 	fn get_id(&self) -> &str {
 		self.node.get_id()
 	}
-    fn get_min_power(&mut self) -> f32 {
+    fn get_min_power(&self) -> f32 {
 		self.node.get_min_power()
 	}
-    fn get_max_power(&mut self) -> f32 {
+    fn get_max_power(&self) -> f32 {
 		self.node.get_max_power()
 	}
     fn get_current_power(&mut self) -> ResultOpenHems<f32> {
 		self.node.get_current_power()
 	}
-    fn is_on(&mut self) -> ResultOpenHems<bool> {
+    fn is_on(&self) -> ResultOpenHems<bool> {
+		self.node.is_on()
+	}
+    fn is_activate(&mut self) -> bool {
+		self.node.is_activate()
+	}
+	fn get_type(&self) -> NodeType {
+		NodeType::PublicPowerGrid
+	}
+}
+
+#[derive(Clone, Debug)] // Clone
+pub struct SolarPanel {
+	// Node
+	node: NodeBase,
+	module_model: String,
+	inverter_model: String,
+	tilt: f32,
+	azimuth: f32,
+	module_per_string: u32,
+	strings_per_inverter: u32,
+}
+impl SolarPanel {
+}
+pub fn get_solarpanel(node: NodeBase, module_model: String, inverter_model: String,
+			tilt: f32, azimuth: f32, module_per_string: u32, strings_per_inverter: u32
+		) -> ResultOpenHems<SolarPanel> {
+	Ok(SolarPanel {
+		node: node,
+		module_model,
+		inverter_model,
+		tilt,
+		azimuth,
+		module_per_string,
+		strings_per_inverter,
+	})
+}
+impl Deref for SolarPanel {
+    type Target = NodeBase;
+    fn deref(&self) -> &NodeBase {
+        &self.node
+    }
+}
+impl Node for SolarPanel {
+    // Attributes
+	fn get_id(&self) -> &str {
+		self.node.get_id()
+	}
+    fn get_min_power(&self) -> f32 {
+		self.node.get_min_power()
+	}
+    fn get_max_power(&self) -> f32 {
+		self.node.get_max_power()
+	}
+    fn get_current_power(&mut self) -> ResultOpenHems<f32> {
+		self.node.get_current_power()
+	}
+    fn is_on(&self) -> ResultOpenHems<bool> {
 		self.node.is_on()
 	}
     fn is_activate(&mut self) -> bool {

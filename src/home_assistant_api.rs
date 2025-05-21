@@ -199,7 +199,7 @@ impl<'a> HomeAssistantAPI {
 		self.token = token;
 		self.init_network()
 	}
-	pub fn switch(&self, entity_id:&str, on:bool) -> ResultOpenHems<()> {
+	pub fn switch(&self, entity_id:&str, on:bool) -> ResultOpenHems<bool> {
 		let data = json!({
 			"entity_id": entity_id
 		});
@@ -211,7 +211,7 @@ impl<'a> HomeAssistantAPI {
 				println!("States : {:?}", states);
 			}
 		}
-		Ok(())
+		Ok(true)
 	}
 }
 
